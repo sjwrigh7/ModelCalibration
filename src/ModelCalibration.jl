@@ -15,6 +15,7 @@ using BlackBoxOptim
 using Parameters
 using JLD2
 using Zygote
+using LatexStrings
 # Write your package code here.
 
 end
