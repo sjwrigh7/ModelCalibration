@@ -1,0 +1,98 @@
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
+############################ Define Prior Functions ###############################
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
+
+"""
+    prior_theta(prior_data::PriorData,vars::UpdatedVars)
+This function evaluates the probability density function of the prior distribution on θ.
+Given that θ is modeled to have a uniform prior distribution, this function returns the same value for any value of θ.
+Generally, this function is not required for evaluation in a posterior sampling scheme.
+
+---
+Keyword arguments
+* `prior_data::PriorData` Data structure containing the prior distribution hyperparameters for all variables
+* `vars::UpdatedVars` Data structure containing the most recently sampled values of all variables in the MCMC sampling scheme.
+
+---
+Returns
+* `pdf_val` A scalar Float giving the value of the θ prior distribution.
+
+---
+Details
+Given that θ are all modeled to have uniform prior distributions, this function evaluates to 1/(B-A) where B and A are the upper and lower bounds for the uniform distribution, respectively.
+"""
+function prior_theta(prior_data::PriorData,vars::UpdatedVars)
+    A = prior_data.theta.par1 #min val
+    B = prior_data.theta.par2 #max val
+    pdf_val = 1/(B-A)         #pdf val
+    return pdf_val
+end
+
+"""
+    prior_delta(vars::UpdatedVars,data::DataStr,rho::Vector{Float64},nx::Int64,nobs::Int64)
+Function to evaluate the probability density function of the discrepancy term (δ) prior distribution.
+
+---
+Keyword arguments
+* `vars::UpdatedVars` Struct containing values of the parameters to use for evaluating the prior distribution density function.
+* `data::DataStr` Struct containing the experimental and computer simulator data.
+* `rho::Vector{Float64}` A Vector of length p containing the ρ values for evaluating the prior distribution density function.
+* `nx::Int64` The number of x variables in the model.
+* `nobs::Int64` The length of the data model (multivariate normal distribution) for a single independent observation.
+Note that `rho` are supplied separately from the other variables contained in `vars` to allow evaluation of the likelihood at different values of ρ without requiring altering the `vars` struct during Matropolis-Hastings updates.
+
+---
+Returns
+* `pdf_val` The evaluation of the discrepancy term (δ) prior distribution density function.
+
+---
+Details
+The discrepancy term (δ) assumes a zero mean prior distribution with a covariance structure defined by Σ=σ^2*C.
+C is the correlation structure. It is a size n square matrix with each element calculated by the following:
+C(x,x') = ∏(ρ^[4*(x-x')])
+The δ prior distribution density is evaluated by MVN(0,Σ)
+"""
+function prior_delta(vars::UpdatedVars,data::DataStr,rho::Vector{Float64},
+    nx::Int64,nobs::Int64)
+    
+    delta = vars.delta        #pull delta
+    sig2 = vars.sig2[1]       #pull sig2
+    rho = rho                 #pull rho
+    x = data.exp.x            #pull x
+
+    response = delta          
+    mean = repeat([0],length(delta))  #mean of delta prior
+
+    covar = sig2*correlation_construct(rho,x,nx,nobs) #calc covar matrix
+    pdf_val = pdf(MvNormal(mean,covar),response)      #calculate pdf val
+    return pdf_val
+end
+"""
+    prior_rho(rho::Float64,prior_data::PriorData,k::Int64)
+Function to evaluate the prior distribution density of the discrepancy term correlation parameters (ρ).
+
+---
+Keyword arguments
+* `rho::Float64` The value of the correlation parameter to be evaluated in the prior distribution density funciton.
+* `prior_data::PriorData` Data structure containing prior distribution hyperparameters for all variables.
+* `k::Int64` An integer to specify which x variable's correlation parameter is being evaluated.
+
+---
+Returns
+* `pdf_val` A scalar Float containing the evaluation of the prior distribution density function for the `k`th ρ.
+
+---
+Details
+This function uses a beta distribution prior for ρ, using the parameters, a and b, already specified in `prior_data`.
+This function evaluates the pdf of Beta(a,b) at ρ
+"""
+#### rho prior pdf function
+# inputs: rhos, prior data, MCMC iteration vals
+# returns: #pdf val of rho
+function prior_rho(rho::Float64,prior_data::PriorData,k::Int64)
+    a = prior_data.rho.par1[k] #pull prior hyperparams
+    b = prior_data.rho.par2[k]
+#    rho = vars.rho         #pull rho
+    pdf_val = pdf(Beta(a,b),rho)   #calc pdf val
+    return pdf_val
+end

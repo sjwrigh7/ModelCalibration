@@ -1,5 +1,3 @@
-module ModelCalibration
-
 using LinearAlgebra
 using Statistics
 using Distributions
@@ -15,6 +13,3 @@ using BlackBoxOptim
 using Parameters
 using JLD2
 using Zygote
-# Write your package code here.
-
-end
