@@ -191,7 +191,7 @@ end
 
 """
     GriddyVarsStruct(theta::Vector{Int},tau2::Vector{Float64},sig_star2::Vector{Float64},rho::Vector{Float64})
-Data structure containing the samples and Metropolis-Hastings information from the Markov Chain Monte Carlo simulation sampling of the posterior distribution in the Bayesian model calibration.
+Data structure containing posterior index samples for the griddy Gibbs sampler.
 
 ---
 Keyword arguments
@@ -205,6 +205,24 @@ Keyword arguments
     tau2::Vector{Float64}
     sig_star2::Vector{Int}
     rho::Vector{Int}
+end
+
+"""
+    GriddyPosteriors(theta::Array{Float64},tau2::Vector{Float64},sig_star2::Vector{Float64},rho::Vector{Float64})
+Struct to store the posterior samples from the griddy Gibbs sampler, converted from the posterior indices.
+
+---
+Keyword arguments
+* `theta::Array{Float64}` Array of unknown computer model parameter samples.
+* `tau2::Vector{Float64}` Vector of data model variance parameter samples.
+* `sig_star2::Vector{Float64}` Vector of discrepancy variance parameter samples.
+* `rho::Vector{Float64}` Vector of discrepancy correlation parameter samples.
+"""
+@with_kw mutable struct GriddyPosteriors
+    theta::Array{Float64}
+    tau2::Vector{Float64}
+    sig_star2::Vector{Float64}
+    rho::Vector{Float64}
 end
 
 """
