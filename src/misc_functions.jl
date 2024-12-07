@@ -79,7 +79,7 @@ function setup(design_raw::Array{Float64},simobs_raw::Vector{Float64},
     )
 
     # normalize data
-    design_norm,simobs_norm,expobs_norm = normalize_data(design_raw,simobs_raw,expobs_raw,nx,ntheta,nsim,nobs_tot,scales)
+    design_norm,simobs_norm,expobs_norm = normalize_data(design_raw,simobs_raw,expobs_raw,nx,nsim,scales)
 
     # format Data
     data = format_data(design_norm,simobs_norm,expobs_norm,nx)
@@ -97,6 +97,38 @@ function setup(design_raw::Array{Float64},simobs_raw::Vector{Float64},
         Please ensure that the computer simulator and experimental data control settings match.")
     end
     return nobs_tot,nrep,nloc,scales,data,priors
+end
+
+"""
+    unnormalize_var(var::Array{Float64},scales::ScalePar)
+Function to un-normalize a normalized variable's Array data. This function takes data ∈ [0,1] and scales it based on the `scales`.
+
+---
+Keyword arguments
+* `var::Array{Float64}` The array of field values to be scaled, with dimensions n and p.
+* `scales::ScalePar` The data structure containing the minimum and maximum values for scaling. The minimum and maximum values specified in this structure must be Vectors of length p.
+---
+∀ x ∈ `var`, y = (x-`scales.min`)/(`scales.max`-`scales.min`)
+---
+Returns
+* `output::Array{Float64}` An array containing the original field values, `var`, scaled to show the relative distance between the minimum and maximum values specified by `scales`.
+
+"""
+function unnormalize_var(var::Array{Float64},scales::ScalePar)
+    output = similar(var)
+    num_dims = length(size(var))
+
+    if num_dims == 1
+        output .= var .* (scales.max - scales.min) .+ scales.min
+    elseif num_dims == 2
+        for i in 1:size(var)[2]
+            output[:,i] .= var[:,i] .* (scales.max[i] - scales.min[i]) .+ scales.min[i]
+        end
+    else
+        error("The Array passed to be normalized has too many dimensions and I don't know how to handle it.
+        Please ensure that the `size()` of this variable returns a Tuple of length 2 or less.")
+    end
+    return output
 end
 
 """
@@ -132,62 +164,60 @@ function normalize_var(var::Array{Float64},scales::ScalePar)
 end
 
 """
-    scale_data(design_raw::Array{Float64},simobs_raw::Vector{Float64},expobs_raw::Array{Float64},nx::Int64,ntheta::Int64,nsim::Int64,nobs_tot::Int64,scales::scaling)
-Function to scale a single variable's Array data to the relative distance between the minimum and maximum values specified by the `scales` structure.
-The function returns an Array, `output`, of equal size to `var` with its data scaled based on the minimum and maximum value described in `values`.
+    normalize_data(design_in::Array{Float64},simobs_in::Vector{Float64},expobs_in::Array{Float64},nx::Int64,nsim::Int64,scales::scaling,rev::Bool=false)
+Function to normalize data to the [0,1] interval or reverse the normalization back to the original data.
 
 ---
 Keyword arguments
-* `design_raw::Array{Float64}` Matrix of input values for the computer simulator, of dimensions n and p+m. The first p columns correspond to control variables (x) and the last m correspond to unknown variables (θ).
-* `simobs_raw::Vector{Float64}` Vector of response values from the computer simulator, of length n. The rows must correspond to their appropriate input settings in `design`.
-* `expobs_raw::Union{Array{Float64},Float64}` Matrix of experimental data, of dimensions v and p+1. The first p columns correspond the control independent variables (x) and the last column corresponds to the observed response.
+* `design_in::Array{Float64}` Matrix of input values for the computer simulator, of dimensions n and p+m. The first p columns correspond to control variables (x) and the last m correspond to unknown variables (θ).
+* `simobs_in::Vector{Float64}` Vector of response values from the computer simulator, of length n. The rows must correspond to their appropriate input settings in `design`.
+* `expobs_in::Union{Array{Float64},Float64}` Matrix of experimental data, of dimensions v and p+1. The first p columns correspond the control independent variables (x) and the last column corresponds to the observed response.
 * `nx::Int64` The number of independent control variables (x) in the experimental and computer simulator data.
-* `ntheta::Int64` The number of independent unknown variables (θ) in the computer simulator data.
 * `nsim::Int64` The number of computer simulator data points.
-* `nobs_tot::Int64` The number of experimental
 * `scales::Scaling` Data structure containing minimum and maximum values for the x, y, and θ variables for scaling.
+* `rev::Bool` An indicator of whether to normalize the data or reverse the normalization. Default value of false.
 
 ---
 Returns
-* `design_norm::Array{Float64}` The `design_raw` Matrix normalized to the relative Euclidean distance between the values specified in `scales`.
-* `simobs_norm::Vector{Float64}` The `simobs_raw` Vector normalized to the relative Euclidean distance between the values specified in `scales`.
-* `expobs_norm::Union{Array{Float64},Float64}` The `expobs_raw` Matrix normalized to the relative Euclidean distance between the values specified in `scales`.
+* `design_out::Array{Float64}` The `design_raw` Matrix normalized to the relative Euclidean distance between the values specified in `scales`.
+* `simobs_out::Vector{Float64}` The `simobs_raw` Vector normalized to the relative Euclidean distance between the values specified in `scales`.
+* `expobs_out::Union{Array{Float64},Float64}` The `expobs_raw` Matrix normalized to the relative Euclidean distance between the values specified in `scales`.
 
 ---
 Details
 Concatenates all values for y from the computer simulator and experimental data.
 Concatenates all values for each dimension of x in the computer simulator and experimental data.
-Calls `normalize_var` on the concatenated y data, the concatenated x data in each dimension of x, and the computer simulator θ values for each dimension of θ.
+Calls `normalize_var` or `unnormalize_var` on the concatenated y data, the concatenated x data in each dimension of x, and the computer simulator θ values for each dimension of θ.
 """
-function normalize_data(design_raw::Array{Float64},simobs_raw::Vector{Float64},
-    expobs_raw::Union{Array{Float64},Float64},nx::Int64,ntheta::Int64,
-    nsim::Int64,nobs::Int64,scales::Scaling)
+function normalize_data(design_in::Array{Float64},simobs_in::Vector{Float64},
+    expobs_in::Union{Array{Float64},Float64},nx::Int64,
+    nsim::Int64,scales::Scaling,rev::Bool=false)
     # if there are x variables, concatenate them of across computer simulator and experimental data and then normalize them
     if nx > 0
-        x_raw = vcat(design_raw[:,1:nx],expobs_raw[:,1:nx])
-        x_norm = normalize_var(x_raw,scales.x)
+        x_in = vcat(design_in[:,1:nx],expobs_in[:,1:nx])
+        x_out = rev ? unnormalize_var(x_in,scales.x) : normalize_var(x_in,scales.x)
     end
 
     # extract theta values from the design matrix and normalize them
-    theta_raw = design_raw[:,(nx+1):end]
-    theta_norm = normalize_var(theta_raw,scales.theta)
+    theta_in = design_in[:,(nx+1):end]
+    theta_out = rev ? unnormalize_var(theta_in,scales.theta) : normalize_var(theta_in,scales.theta)
 
     # concatenate response variable from experimental and computer simulator data and normalize it
-    y_raw = vcat(simobs_raw,expobs_raw[:,end])
-    y_norm = normalize_var(y_raw,scales.y)
+    y_in = vcat(simobs_in,expobs_in[:,end])
+    y_out = rev ? unnormalize_var(y_in,scales.y) : normalize_var(y_in,scales.y)
 
     # rearrange normalized data back into original format, checking against the number of x variables
     if nx > 0
-        design_norm = hcat(x_norm[1:nsim,:],theta_norm)
-        simobs_norm = y_norm[1:nsim]
-        expobs_norm = hcat(x_norm[(nsim+1):end,:],y_norm[(nsim+1):end])
+        design_out = hcat(x_out[1:nsim,:],theta_out)
+        simobs_out = y_out[1:nsim]
+        expobs_out = hcat(x_out[(nsim+1):end,:],y_out[(nsim+1):end])
     else
-        design_norm = theta_norm
-        simobs_norm = y_norm[1:nsim]
-        expobs_norm = y_norm[(nsim+1):end]
+        design_out = theta_out
+        simobs_out = y_out[1:nsim]
+        expobs_out = y_out[(nsim+1):end]
     end
 
-    return design_norm,simobs_norm,expobs_norm
+    return design_out,simobs_out,expobs_out
 end
 
 """
