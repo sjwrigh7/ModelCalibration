@@ -2,8 +2,8 @@
 ############################# Define Misc Functions ###############################
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
 """
-    normalize_samples!(samples::BulkVarsStruct,scales::Scaling)
-    normalize_samples!(samples::BulkVarsStruct,scales::Scaling,rev::Bool)
+    normalize_samples(samples::BulkVarsStruct,scales::Scaling)
+    normalize_samples(samples::BulkVarsStruct,scales::Scaling,rev::Bool)
 Function to normalize or reverse the normalization of the posterior samples.
 This is the implementation for the continuous sampler results.
 
@@ -14,15 +14,21 @@ Keyword arguments
 Optional arguments
 * `rev::Bool` Indicator of whether to reverse the normalization or not.
 """
-function normalize_samples!(samples::BulkVarsStruct,scales::Scaling,rev::Bool=true)
-    samples.theta .= rev ? unnormalize_var(samples.theta,scales.theta) : 
+function normalize_samples(samples::BulkVarsStruct,scales::Scaling,rev::Bool=true)
+
+    theta .= rev ? unnormalize_var(samples.theta,scales.theta) : 
         normalize_var(samples.theta,scales.theta)
-    samples.sig2 .= rev ? (unnormalize_var(sqrt.(samples.sig2),scales.y)).^2 :
+    sig2 .= rev ? (unnormalize_var(sqrt.(samples.sig2),scales.y)).^2 :
         (normalize_var(sqrt.(samples.sig2),scales.y)).^2
-    samples.delta .= rev ? unnormalize_var(samples.delta,scales.y) :
+    delta .= rev ? unnormalize_var(samples.delta,scales.y) :
         normalize_var(samples.delta,scales.y)
-    samples.tau2 .= rev ? (unnormalize_var(sqrt.(samples.tau2),scales.y)).^2 :
+    tau2 .= rev ? (unnormalize_var(sqrt.(samples.tau2),scales.y)).^2 :
         (normlize_var(sqrt.(samples.tau2),scales.y)).^2
+    
+    samples_norm = BulkVarsStruct(theta=theta,tau2=tau2,sig2=sig2,delta=delta,
+        rho=samples.rho,accept=samples.accept,ratio=samples.ratio)
+    
+    return samples_norm
 end
 
 """
@@ -402,9 +408,11 @@ Function to plot the surrogate model and data model estimations.
 * `samples::BulkVarsStruct` Struct containing non-normalized posterior samples.
 * `data::DataStr` Struct containing the computer simulator and experimental data.
 * `scales::Scaling` Struct containing the minimum and maximum values for each variable.
+* `save_plots::Bool` Indicator of whether to save the plot that is generated.
+* `show_plots::Bool` Indicator of whether to display the plot that is generated.
 """
 function plot_prediction!(thetas::Array{Float64},samples::BulkVarsStruct,data::DataStr,
-    scales::Scaling)
+    scales::Scaling,save_plots::Bool,show_plots::Bool)
     
     exp_resp = normalize_var(data.exp.y,scales.y)
 
@@ -462,9 +470,11 @@ Function to plot the surrogate model and data model estimations.
 * `samples::GriddyPosteriors` Struct containing non-normalized posterior samples.
 * `data::DataStr` Struct containing the computer simulator and experimental data.
 * `scales::Scaling` Struct containing the minimum and maximum values for each variable.
+* `save_plots::Bool` Indicator of whether to save the plot that is generated.
+* `show_plots::Bool` Indicator of whether to display the plot that is generated.
 """
 function plot_prediction!(thetas::Array{Float64},samples::GriddyPosteriors,data::DataStr,
-    scales::Scaling)
+    scales::Scaling,save_plots::Bool,show_plots::Bool)
     
     exp_resp = normalize_var(data.exp.y,scales.y)
 
@@ -502,7 +512,16 @@ function plot_prediction!(thetas::Array{Float64},samples::GriddyPosteriors,data:
 end
 
 """
+    get_estimates(data::Vector{Float64})
+Function to get the mean, median, and 95% credible bounds of a set of posterior samples.
 
+---
+Keyword arguments
+* `data::Vector{Float64}`
+
+---
+Returns
+* `temp::Vector{Float64}` Vector containing the estimates.
 """
 function get_estimates(data::Vector{Float64})
     temp = Vector{Float64}(undef,4)
@@ -514,7 +533,14 @@ function get_estimates(data::Vector{Float64})
 end
 
 """
+    make_estimate_table(samples::BulkVarsStruct,nx::Int,ntheta::Int)
+Function to make the table of estimates from the posterior samples.
 
+---
+Keyword arguments
+* `samples::BulkVarsStruct` struct containing the posterior samples from the continuous sampler.
+* `nx::Int` number of x variables.
+* `ntheta::Int` number of theta variables.
 """
 function make_estimate_table(samples::BulkVarsStruct,nx::Int,ntheta::Int)
     if nx > 0
@@ -541,8 +567,101 @@ function make_estimate_table(samples::BulkVarsStruct,nx::Int,ntheta::Int)
     estimates[:,1] = param_labs
 
     pretty_table(estimates;header=var_lab)
-    
+
     open("param_estimates.txt","w") do file
         pretty_table(file,estimates;header=var_lab)
     end
+end
+
+"""
+    make_estimate_table!(samples::GriddyPosteriors,nx::Int,ntheta::Int)
+Function to make the table of estimates from the posterior samples.
+
+---
+Keyword arguments
+* `samples::GriddyPosteriors` struct containing the posterior samples from the griddy Gibbs sampler.
+* `nx::Int` number of x variables.
+* `ntheta::Int` number of theta variables.
+"""
+function make_estimate_table!(samples::GriddyPosteriors,nx::Int,ntheta::Int)
+    if nx > 0
+        estimates = Array{Float64}(undef,4,ntheta+4)
+        estimates[:,2] = get_estimates(samples.rho)
+        estimates[:,end-1] = get_estimates(samples.sig_star2)
+        var_labs = vcat(["Value"],[LaTeXString("\\rho")],
+            [LaTeXString("\\theta_{$i}") for j in 1:ntheta],
+            [LaTeXString("\\sigma^{*}"),LaTeXString("\\tau")])
+    else
+        estimates = Array{Float64}(undef,4,ntheta+3)
+        var_labs = vcat(["Value"],[LaTeXString("\\theta_{$i}") for j in 1:ntheta],
+            [LaTeXString("\\tau")])
+    end
+    for i in 1:ntheta
+        estimates[:,i+nx+1] = get_estimates(samples.theta[:,i])
+    end
+    estimates[:,end] = get_estimates(samples.tau2)
+    param_labs = ["95% Lower Bound","Median","Mean","95% Upper Bound"]
+    
+    estimates = string.(round(estimates,digits=5))
+    estimates[:,1] = param_labs
+
+    pretty_table(estimates;header=var_lab)
+
+    open("param_estimates.txt","w") do file
+        pretty_table(file,estimates;header=var_lab)
+    end
+end
+
+"""
+    post_process(samples::BulkVarsStruct,nx::Int,ntheta::Int,nburn::Int,scales::Scaling,make_plots::Bool,save_plots::Bool,show_plots::Bool)
+    post_process(samples::BulkVarsStruct,nx::Int,ntheta::Int,nburn::Int,scales::Scaling,make_plots::Bool,save_plots::Bool,show_plots::Bool,nbins::Int,nthin::Int)
+Wrapper function to post-process the posterior samples.
+
+---
+Keyword arguments
+* `samples::BulkVarsStruct` Struct containing the posterior samples.
+* `nx::Int` Number of x dimensions.
+* `ntheta::Int` number of θ dimensions.
+* `nburn::Int` The number of samples to burn.
+* `make_plots::Bool` Indicator of whether to make plots.
+* `save_plots::Bool` Indicator of whether to save the plots.
+* `show_plots::Bool` Indicator of whether to show the plots.
+Optional arguments
+* `nthin::Int` The number of samples to skip when thinning.
+  * default value of 20
+* `nbins::Int` The number of bins to use for histograms.
+  * default value of 30
+"""
+function post_process(samples::BulkVarsStruct,nx::Int,ntheta::Int,nburn::Int,
+    scales::Scaling,make_plots::Bool,save_plots::Bool,show_plots::Bool,
+    nthin::Int=20,nbins::Int=30)
+
+    samples = remove_burn(samples,nburn)
+    samples = thin_samples(samples,nthin)
+
+    scaled_samples = normalize_samples(samples,scales)
+
+    sqrt_variance!(scaled_samples)
+
+    if make_plots
+        posterior_hist!(scaled_samples.tau2,nbins,"tau",0,save_plots,show_plots)
+        trace_plot!(scaled_samples.tau2,"tau",0,save_plots,show_plots)
+        posterior_hist!(scaled_samples.sig2,nbins,"sigma",0,save_plots,show_plots)
+        trace_plot!(scaled_samples.sig2,"sigma",0,save_plots,show_plots)
+        for theta in 1:ntheta
+            posterior_hist!(scaled_samples.theta[:,theta],nbins,"theta",
+                theta,save_plots,show_plots)
+            trace_plot!(scaled_samples.theta[:,theta],"theta",
+                theta,save_plots,show_plots)
+        end
+        for rho in 1:nx
+            posterior_hist!(scaled_samples.rho[:,rho],nbins,"rho",rho,
+                save_plots,show_plots)
+            trace_plot!(scaled_samples.rho[:,rho],"rho",rho,
+                save_plots,show_plots)
+        end
+        plot_disc!(scaled_samples.delta,data.exp.x,nbins,save_plots,show_plots)
+        plot_prediction!(samples.theta,scaled_samples,data,scales,save_plots,show_plots)
+    end
+    make_estimate_table(scaled_samples,nx,ntheta)
 end
