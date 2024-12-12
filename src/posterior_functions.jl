@@ -67,31 +67,33 @@ The proposal probabilities are calculated using θ and θ*, denoted as J(θ) and
 The acceptance probability of θ* is calculated as π(θ*)/π(θ)*J(θ*)/J(θ).
 A random sample form U(0,1) determines if the proposed value is accepted or rejected.
 """
-function metropolis_theta(prior_data::PriorData,data::DataStr,
-    vars::UpdatedVars, k::Int64,stepsize::Float64)
+function metropolis_theta(model,prior_data::PriorData,data::DataStr,
+    theta::Vector{Float64},delta::Vector{Float64},tau2::Float64,
+    k::Int64,stepsize::Float64)
     c1 = 1.0              #scale of theta
     c2 = 0.0              #min value for theta
 
-    current_theta = vars.theta[k]        #pull current theta
-    current_gamma = g_inv(c1,c2,current_theta) #transform to gamma
+    current_theta = theta[k]        #pull current theta
+    current_gamma = logit(c1,c2,current_theta) #transform to gamma
     prop_gamma = rand(Normal(current_gamma,stepsize)) #propose new gamma
-    prop_theta = g(c1,c2,prop_gamma)   #transform back to theta
+    prop_theta = expit(c1,c2,prop_gamma)   #transform back to theta
 
-    thetas_propose = copy(vars.theta)  #copy current thetas
-    thetas_propose[k] = prop_theta     #replace theta at index k with prop val
-    thetas_current = copy(vars.theta)  #copy current thetas
+    #thetas_propose = copy(vars.theta)  #copy current thetas
+    log_lik_current = loglik(data,theta,delta,tau2,model)[1]
+    theta[k] = prop_theta     #replace theta at index k with prop val
 
-    lik_prop = lik(data,vars,thetas_propose)[1] #calc likelihood
-    lik_current = lik(data,vars,thetas_current)[1]
+    log_lik_prop = loglik(data,theta,delta,tau2,model)[1] #calc likelihood
 
     #calculate jump distribution values
-    jump_current = pdf(Normal(current_gamma,stepsize),prop_gamma)*
-    abs(-(c1)/((prop_theta+c2)*(-c1+prop_theta+c2)))
-    jump_propose = pdf(Normal(prop_gamma,stepsize),current_gamma)*
-    abs(-(c1)/((current_theta+c2)*(-c1+current_theta+c2)))
+    log_jump_current = logpdf(Normal(current_gamma,stepsize),prop_gamma)+
+    log(abs(-(c1)/((prop_theta+c2)*(-c1+prop_theta+c2))))
+    log_jump_propose = logpdf(Normal(prop_gamma,stepsize),current_gamma)+
+    log(abs(-(c1)/((current_theta+c2)*(-c1+current_theta+c2))))
 
     #calculate acceptance
-    ratio = min((lik_prop/lik_current)*jump_propose/jump_current, 1)
+    log_lik_ratio = log_lik_prop - log_lik_current
+    log_jump_ratio = log_jump_propose - log_jump_current
+    ratio = min(exp(log_lik_ratio + log_jump_ratio), 1)
     accept = rand(Uniform(0,1))<ratio
 
     new_value = ifelse(accept,prop_theta,current_theta) #determine acceptance
@@ -133,9 +135,9 @@ function metropolis_theta_nox(prior_data::PriorData,data::DataStr,
     c2 = 0.0              #min value for theta
 
     current_theta = vars.theta[k]        #pull current theta
-    current_gamma = g_inv(c1,c2,current_theta) #transform to gamma
+    current_gamma = logit(c1,c2,current_theta) #transform to gamma
     prop_gamma = rand(Normal(current_gamma,stepsize)) #propose new gamma
-    prop_theta = g(c1,c2,prop_gamma)   #transform back to theta
+    prop_theta = expit(c1,c2,prop_gamma)   #transform back to theta
 
     thetas_propose = copy(vars.theta)  #copy current thetas
     thetas_propose[k] = prop_theta     #replace theta at index k with prop val
@@ -156,7 +158,7 @@ function metropolis_theta_nox(prior_data::PriorData,data::DataStr,
 
     new_value = ifelse(accept,prop_theta,current_theta) #determine acceptance
 
-    output = metropolis_info(new_value,ratio,accept)
+    output = MetropolisInfo(new_value,ratio,accept)
     return output
 end
 
@@ -193,36 +195,40 @@ function metropolis_rho(prior_data::PriorData,data::DataStr,vars::UpdatedVars,
     c1 = 1.0              #rho scale
     c2 = 0.0              #rho min val
     current_rho = vars.rho[k]     #pull current rho at index k
-    current_gamma = g_inv(c1,c2,current_rho) #transform to gamma
+    current_gamma = logit(c1,c2,current_rho) #transform to gamma
     prop_gamma = rand(Normal(current_gamma,stepsize)) #propose new gamma
-    prop_rho = g(c1,c2,prop_gamma)           #transform back to rho
+    prop_rho = expit(c1,c2,prop_gamma)           #transform back to rho
 
+    #println("current rho = $current_rho")
+    #println("gamma $k = $prop_gamma")
+    #println("rho $k = $prop_rho")
     rhos_current = copy(vars.rho)            #copy current rhos
     rhos_propose = copy(vars.rho)            #copy current rhos
     rhos_propose[k] = prop_rho               #replace rho at k with prop val
 
     #calc delta prior pdf
-    delta_prop = prior_delta(vars,data,rhos_propose,nx,nobs)[1]
-    delta_current = prior_delta(vars,data,rhos_current,nx,nobs)[1]
+    log_delta_prop = log_prior_delta(vars,data,rhos_propose,nx,nobs)[1]
+    log_delta_current = log_prior_delta(vars,data,rhos_current,nx,nobs)[1]
 
     #calc jump distribution pdf
-    jump_current = pdf(Normal(current_gamma,stepsize),prop_gamma)*
-    abs(-(c1)/((prop_rho+c2)*(-c1+prop_rho+c2)))
-    jump_propose = pdf(Normal(prop_gamma,stepsize),current_gamma)*
-    abs(-(c1)/((current_rho+c2)*(-c1+current_rho+c2)))
+    log_jump_current = logpdf(Normal(current_gamma,stepsize),prop_gamma)+
+    log(abs(-(c1)/((prop_rho+c2)*(-c1+prop_rho+c2))))
+    log_jump_propose = logpdf(Normal(prop_gamma,stepsize),current_gamma)+
+    log(abs(-(c1)/((current_rho+c2)*(-c1+current_rho+c2))))
 
     #calculate rho prior pdf
     prior_current = prior_rho(current_rho,prior_data,k)
     prior_prop = prior_rho(prop_rho,prior_data,k)
 
     #calculate acceptance
-    ratio = min((delta_prop/delta_current)*
-    jump_propose/jump_current, 1)
+    log_delta_ratio = log_delta_prop - log_delta_current
+    log_jump_ratio = log_jump_propose - log_jump_current
+    ratio = min(exp(log_delta_ratio + log_jump_ratio), 1)
     accept = rand(Uniform(0,1))<ratio
-
+    #println("accept = $accept")
     new_value = ifelse(accept,prop_rho,current_rho)  #determine acceptance
 
-    output = metropolis_info(new_value,ratio,accept)
+    output = MetropolisInfo(new_value,ratio,accept)
     return output
 end
 
@@ -251,13 +257,13 @@ p(σ^2|.) ∼ IG(α+n/2,β+0.5*δ'*C^-1*δ)
 Where n is the length of the discrepancy term (the same length as the data model's multivariate normal distribution).
 """
 function gibbs_sig2(prior_data::PriorData,data::DataStr,vars::UpdatedVars,
-    nx::Int64,nobs::Int64)
+    nx::Int64,nloc::Int64)
     alpha = prior_data.sig2.par1 #pull prior hyperparams
     beta = prior_data.sig2.par2
     delta = vars.delta           #pull discrepance values
     x = data.exp.x               #pull exp x vals
 
-    C = correlation_construct(vars.rho,x,nx,nobs)  #calc correlation matrix
+    C = correlation_construct(vars.rho,x,nx,nloc)  #calc correlation matrix
 
     par1 = alpha + 0.5*size(x)[1]   #calculation posterior params
     par2 = beta + 0.5*delta'*inv(C)*delta
@@ -288,7 +294,7 @@ Given prior distribution parameters for τ^2 of IG(α,β) and likelihood functio
 p(τ^2|.) ∼ IG(α+n*m/2,β+0.5*λ'*λ)
 Where n is the length of the multivariate normal distribution in the data model, m is the number of independent observations from this data model, and λ is the vector y_i - η - δ.
 """
-function gibbs_tau2(prior_data::PriorData,data::DataStr,vars::UpdatedVars)
+function gibbs_tau2(model,prior_data::PriorData,data::DataStr,vars::UpdatedVars)
     alpha = prior_data.tau2.par1    #pull prior hyperparams
     beta = prior_data.tau2.par2      
     theta = vars.theta              #pull theta
@@ -302,9 +308,9 @@ function gibbs_tau2(prior_data::PriorData,data::DataStr,vars::UpdatedVars)
         theta_pred[i,:] = theta
     end
     #predict model for current thetas
-    eta = predict_y_all(hcat(data.exp.x,theta_pred))
+    eta = predict_y_all(theta,model)
 
-    par1 = alpha + 0.5*size(x)[1]  #calcualte posterior params
+    par1 = alpha + 0.5*prod(size(y))  #calcualte posterior params
     sse = Vector{Float64}(undef,size(y)[2])
     for i in 1:size(y)[2]
         sse[i] = (y[:,i] - eta - delta)'*(y[:,i] - eta - delta)
@@ -341,12 +347,12 @@ An = (Σ^-1 + m^2(τ^2*I)^-1)^-1
 bn = m^2((τ^2*I)^-1)*(ȳ-η)
 m is the number of independent observations of the multivariate normal data.
 """
-function gibbs_delta(data::DataStr,vars::UpdatedVars)
+function gibbs_delta(model,data::DataStr,vars::UpdatedVars,nloc::Int)
     x = data.exp.x    #pull x and y
     y = data.exp.y
 
     #calc covar matrix
-    C = vars.sig2[1,1]*correlation_construct(vars.rho,x,nx,nobs)
+    C = vars.sig2[1,1]*correlation_construct(vars.rho,x,size(x)[2],nloc)
 
     tau2 = vars.tau2[1,1]   #pull theta and tau^2
     theta = vars.theta
@@ -357,9 +363,9 @@ function gibbs_delta(data::DataStr,vars::UpdatedVars)
         theta_pred[i,:] = theta
     end
     #prediction from surrogate model
-    eta = predict_y_all(hcat(data.exp.x,theta_pred))
+    eta = predict_y_all(theta,model)
     #calculate values for posterior
-    An = inv(C) + size(y)[2]^2*(1/(tau2))*Matrix(1.0I,size(x)[1],size(x)[1])
+    An = inv(C) + size(y)[2]*(1/(tau2))*Matrix(1.0I,size(x)[1],size(x)[1])
 
     covar = inv(An)
     covar = 0.5*(covar + covar') #ensures symmetry for stability
@@ -367,7 +373,7 @@ function gibbs_delta(data::DataStr,vars::UpdatedVars)
     for i in 1:size(y)[2]
         bn_vec[:,i] = (y[:,i]-eta)
     end
-    bn = size(y)[2]^2*1/tau2*mean(bn_vec,dims=2)
+    bn = size(y)[2]*1/tau2*mean(bn_vec,dims=2)
     sample = rand(MvNormal(vec(covar*bn),covar))
     return sample  #sample from posterior
 end

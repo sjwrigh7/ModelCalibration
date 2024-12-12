@@ -28,8 +28,12 @@ The exponentiation of this value is returned
 """
 function stepsize_adjust(diff::Float64,scale::Float64,shape::Float64,offset::Float64)
     logscale = scale * atan(shape*diff)
+    #println(logscale)
     logscale = logscale + offset*sign(logscale) - offset
+    #println(logscale)
     factor = exp(logscale)
+    #println("diff = $diff")
+    #println("factor = $factor")
     return factor
 end
 
@@ -48,12 +52,12 @@ Keyword arguments
 * `shape::Float64` Shape parameter to pass into the `stepsize_adjust` function.
 * `offset::Float64` Offset parameter to pass into the `stepsize_adjust` function.
 """
-function update_stepsize!(acceptance::Array{Float64},stepsize::StepSize,
-    history::Array{Float64},nx::Int,ntheta::Int,target::Tuple{Float64}=Tuple([0.3,0.3]),
-    scale::Float64 = 2.0,shape::Float64=30.0,offset::Float64=1.5)
+function update_stepsize!(acceptance::Vector{Float64},stepsize::StepSize,
+    history::Array{Float64},nx::Int,ntheta::Int,target::Vector{Float64},
+    scale::Float64,shape::Float64,offset::Float64)
 
     @inbounds for i in 1:ntheta
-        rate = mean(acceptance[:,i+nx])
+        rate = acceptance[i+nx]
 
         diff = rate - target[1]
 
@@ -62,15 +66,19 @@ function update_stepsize!(acceptance::Array{Float64},stepsize::StepSize,
     end
 
     @inbounds for i in 1:nx
-        rate = mean(acceptance[:,i])
+        rate = acceptance[i]
+        #println("rate = $rate")
 
         diff = rate - target[2]
         
         adjustment = stepsize_adjust(diff,scale,shape,offset)
+        #println("old = $(stepsize.rho[i])")
         stepsize.rho[i] = mean(vcat(history[:,i],[stepsize.rho[i]*adjustment]))
+        #println("addition = $(stepsize.rho[i]*adjustment)")
+        #println("new = $(stepsize.rho[i])")
     end
 
-    return old_stepsize
+    return stepsize
 end
 
 """
@@ -112,10 +120,10 @@ After each batch, the algorithm calculates the average acceptance rate of all M-
 This value is passed to `update_stepsize` to calculate the proposed adjustment to the step size for the next batch.
 The step size for the next batch is then calculated as the average of all previous step sizes and the value calculated from `update_stepsize`.
 """
-function auto_stepsize(data::DataStr,nbatch::Int,batchsize::Int,prior_data::PriorData,
-    nx::Int,ntheta::Int,nobs::Int,theta_init::Vector{Float64},
-    init::Float64=1e-3,target::Tuple{Float64}=Tuple([0.3,0.3]),
-    scale::Float64 = 2.0,shape::Float64=30.0,offset::Float64=1.5)
+function auto_stepsize(model,data::DataStr,nbatch::Int,batchsize::Int,prior_data::PriorData,
+    nx::Int,ntheta::Int,nloc::Int,theta_init::Vector{Float64},
+    init::Float64,target::Vector{Float64},
+    scale::Float64,shape::Float64,offset::Float64)
 
     stepsize = StepSize(repeat([init],ntheta),repeat([init],nx))
     
@@ -123,26 +131,30 @@ function auto_stepsize(data::DataStr,nbatch::Int,batchsize::Int,prior_data::Prio
     mcmc_vars = init_vars(data,total_length,nx,ntheta,theta_init)
 
     stepsize_hist = Array{Float64}(undef,nbatch,nx+ntheta)
-    acceptance_hist = Array{Bool}(undef,nbatch,nx+ntheta)
+    acceptance_hist = Array{Float64}(undef,nbatch,nx+ntheta)
 
     @inbounds @showprogress 1 "Computing Stepsize..." for i in 1:nbatch
-        start = (i-1)*nsize + 1 + ifelse(i==1,1,0)
-        stop = i*nsize
+        #println(i)
+        #println(i==1)
+        #println(ifelse(i==1,1,0))
+        start = (i-1)*batchsize + 1 + ifelse(i==1,1,0)
+        stop = i*batchsize
 
-        mcmc!(data,nsize,prior_data,bulk_vars,start,stop,
-            old_stepsize,nx,ntheta,nobs)
+        mcmc!(model,data,prior_data,mcmc_vars,start,stop,
+            stepsize,nx,ntheta,nloc)
         
         @inbounds for j in 1:nx
             stepsize_hist[i,j] = stepsize.rho[j]
-            acceptance_hist[i,j] = mean(mcmc_vars.accept[1:stop,j])
+            #println("rate_2 = $(mean(mcmc_vars.accept[start:stop,j]))")
+            acceptance_hist[i,j] = mean(mcmc_vars.accept[start:stop,j])
         end
 
         @inbounds for j in 1:ntheta
             stepsize_hist[i,j+nx] = stepsize.theta[j]
-            acceptance_hist[i,j+nx] = mean(mcmc_vars.accept[1:stop,j+nx])
+            acceptance_hist[i,j+nx] = mean(mcmc_vars.accept[start:stop,j+nx])
         end
 
-        stepsize = update_stepsize(acceptance_hist[1:i,:],stepsize,
+        stepsize = update_stepsize!(acceptance_hist[i,:],stepsize,
             stepsize_hist[1:i,:],nx,ntheta,target,scale,shape,offset)
     end
     return stepsize,stepsize_hist,acceptance_hist
@@ -236,66 +248,72 @@ Keyword arguments
 * `show::Bool` An indication of whether the plots should be displayed.
 """
 function plot_stepsize_opt(stepsize::Array{Float64},acceptance::Array{Float64},
-    nx::Int,ntheta::Int,show_plots::Bool,save_plots::Bool)
+    nx::Int,ntheta::Int,show_plots::Bool,save_plots::Bool,mdl_apnd::String)
     function plot_stepsize(epochs::Int,stepsize::Vector{Float64},var::String,iter::Int)
-        p = Plots.plot(1:epochs,stepsize)
-        title!(LaTexString("\$"*"\\"*"$(var)_{$iter}\$ Stepsize over Epochs"))
+        p = Plots.plot(1:epochs,stepsize,label=false,top_margin=5mm,left_margin=5mm,
+            titlelocation=[0.5,1.05])
+        title!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Stepsize over Epochs"))
         xlabel!("Epoch")
-        ylabel!(LaTexString("\$"*"\\"*"$(var)_{$iter}\$ Stepsize"))
-        save_plots ? Plots.savefig(p,"$var-stepsize.png") : nothing
+        ylabel!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Stepsize"))
+        save_plots ? Plots.savefig(p,"$(mdl_apnd)_$var-stepsize.png") : nothing
         show_plots ? Plots.display(p) : nothing
     end
 
     function plot_acceptance(epochs::Int,acceptance::Vector{Float64},var::String,iter::Int)
-        p = Plots.plot(1:epochs,acceptance)
-        title!(LaTexString("\$"*"\\"*"$(var)_{$iter}\$ Acceptance over Epochs"))
+        p = Plots.plot(1:epochs,acceptance,label=false,top_margin=5mm,left_margin=5mm,
+        titlelocation=[0.5,1.05])
+        title!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Acceptance over Epochs"))
         xlabel!("Epoch")
-        ylabel!(LaTexString("\$"*"\\"*"$(var)_{$iter}\$ Acceptance"))
-        save_plots ? Plots.savefig(p,"$var-acceptance.png") : nothing
+        ylabel!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Acceptance"))
+        save_plots ? Plots.savefig(p,"$(mdl_apnd)_$var-acceptance.png") : nothing
         show_plots ? Plots.display(p) : nothing
     end
 
     function plot_step_acc(epochs::Int,acceptance::Vector{Float64},stepsize::Vector{Float64},
         var::String,iter::Int)
         epochs = collect(1:epochs)
-        p = Plots.plot(stepsize,acceptance,zcolor=epochs)
-        title!(LaTexString("\$"*"\\"*"$(var)_{$iter}\$ Acceptance vs. Stepsize"))
-        xlabel!(LaTexString("\$"*"\\"*"$(var)_{$iter}\$ Stepsize"))
-        ylabel!(LaTexString("\$"*"\\"*"$(var)_{$iter}\$ Acceptance"))
-        save_plots ? Plots.savefig(p,"$var-acceptance_v_stepsize.png") : nothing
+        p = Plots.scatter(stepsize,acceptance,zcolor=epochs,label=false,top_margin=5mm,left_margin=5mm,
+        titlelocation=[0.5,1.05])
+        title!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Acceptance vs. Stepsize"))
+        xlabel!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Stepsize"))
+        ylabel!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Acceptance"))
+        save_plots ? Plots.savefig(p,"$(mdl_apnd)_$var-acceptance_v_stepsize.png") : nothing
         show_plots ? Plots.display(p) : nothing
     end
 
-    function plot_secants(epochs::Int,acceptance::Vector{Float64},stepsize::Vector{Float64})
-        p = Plots.plot(1:epochs,stepsize)
-        title!(LaTexString("\$"*"\\"*"$(var)_{$iter}\$ Stepsize Convergence"))
+    function plot_secants(epochs::Int,acceptance::Vector{Float64},stepsize::Vector{Float64},
+        var::String,iter::Int)
+        p = Plots.plot(1:epochs,stepsize,labe=false,top_margin=5mm,left_margin=5mm,
+        titlelocation=[0.5,1.05])
+        title!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Stepsize Convergence"))
         xlabel!("Epoch")
-        ylabel!(LaTexString("\$"*"\\"*"$(var)_{$iter}\$ Stepsize Rate of Change"))
-        save_plots ? Plots.savefig(p,"$var-stepsize_convergence.png") : nothing
+        ylabel!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Stepsize Rate of Change"))
+        save_plots ? Plots.savefig(p,"$(mdl_apnd)_$var-stepsize_convergence.png") : nothing
         show_plots ? Plots.display(p) : nothing
 
-        p = Plots.plot(1:epochs,acceptance)
-        title!(LaTexString("\$"*"\\"*"$(var)_{$iter}\$ Acceptance Convergence"))
+        p = Plots.plot(1:epochs,acceptance,label=false,top_margin=5mm,left_margin=5mm,
+        titlelocation=[0.5,1.05])
+        title!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Acceptance Convergence"))
         xlabel!("Epoch")
-        ylabel!(LaTexString("\$"*"\\"*"$(var)_{$iter}\$ Acceptance Rate of Change"))
-        save_plots ? Plots.savefig(p,"$var-acceptance_convergence.png") : nothing
+        ylabel!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Acceptance Rate of Change"))
+        save_plots ? Plots.savefig(p,"$(mdl_apnd)_$var-acceptance_convergence.png") : nothing
         show_plots ? Plots.display(p) : nothing
     end
 
     secants = assess_convergence(acceptance,stepsize,nx,ntheta)
-    epochs = size(stepsize)[1]
+    epochs = size(acceptance)[1]
     for rho in 1:nx
         plot_stepsize(epochs,stepsize[:,rho],"rho",rho)
-        plot_acceptance(epochs,accetpance[:,rho],"rho",rho)
+        plot_acceptance(epochs,acceptance[:,rho],"rho",rho)
         plot_step_acc(epochs,acceptance[:,rho],stepsize[:,rho],"rho",rho)
-        plot_secants(epochs,secants[1][:,rho],secants[2][:,rho],"rho",rho)
+        plot_secants(epochs-1,secants[1][:,rho],secants[2][:,rho],"rho",rho)
     end
 
     for theta in 1:ntheta
         plot_stepsize(epochs,stepsize[:,nx+theta],"theta",theta)
         plot_acceptance(epochs,acceptance[:,nx+theta],"theta",theta)
         plot_step_acc(epochs,acceptance[:,nx+theta],stepsize[:,nx+theta],"theta",theta)
-        plot_step_acc(epochs,secansa[1][:,nx+theta],secants[2][:,nx+theta],"theta",theta)
+        plot_secants(epochs-1,secants[1][:,nx+theta],secants[2][:,nx+theta],"theta",theta)
     end
 end
 
@@ -388,20 +406,20 @@ Optional arguments
 Returns
 * `stepsize::StepSize` Struct containing the calculated stepsizes that will result in the target acceptance rate.
 """
-function find_stepsize(data::DataStr,nbatch::Int,batchsize::Int,prior_data::PriorData,
-    nx::Int,ntheta::Int,nobs::Int,theta_init::Vector{Float64},method::Int,make_plots::Bool,
-    show_plots::Bool,save_plots::Bool,init::Float64=1e-3,target::Tuple{Float64}=Tuple([0.3,0.3]),
-    scale::Float64 = 2.0,shape::Float64=30.0,offset::Float64=1.5)
+function find_stepsize(model,data::DataStr,nbatch::Int,batchsize::Int,prior_data::PriorData,
+    nx::Int,ntheta::Int,nloc::Int,theta_init::Vector{Float64},method::Int,make_plots::Bool,
+    show_plots::Bool,save_plots::Bool,init::Float64=1e-3,target::Vector{Float64}=[0.3,0.3],
+    scale::Float64 = 2.0,shape::Float64=30.0,offset::Float64=1.5;mdl_apnd::String="")
 
     if method == 1
-        stepsize,stepsize_hist,acceptance_hist = auto_stepsize(data,nbatch,batchsize,prior_data,nx,
-        ntheta,nobs,theta_init,init,target,scale,shape,offset)
+        stepsize,stepsize_hist,acceptance_hist = auto_stepsize(model,data,nbatch,batchsize,prior_data,nx,
+        ntheta,nloc,theta_init,init,target,scale,shape,offset)
     elseif method == 2
         stepsize,stepsize_hist,acceptance_hist = stepsize_gd(data,nbatch,batchsize,nx,ntheta,nobs,
         theta_init,init,target,eta)
     end
 
-    make_plots ? plot_stepsize_opt(stepsize_hist,acceptance_hist,nx,ntheta,show_plots,save_plots) : nothing
+    make_plots ? plot_stepsize_opt(stepsize_hist,acceptance_hist,nx,ntheta,show_plots,save_plots,mdl_apnd) : nothing
 
     return stepsize
 end

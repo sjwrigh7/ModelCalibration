@@ -15,10 +15,14 @@ using BlackBoxOptim
 using Parameters
 using JLD2
 using Zygote
-using LatexStrings
+using LaTeXStrings
 using StatsBase
+using Plots.PlotMeasures
 # Write your package code here.
 
+include("structs.jl")
+include("misc_functions.jl")
+include("optimization.jl")
 include("continuous_samplers.jl")
 include("gaussian_process_kernel.jl")
 include("grid_generation.jl")
@@ -31,7 +35,6 @@ include("precomputation.jl")
 include("prior_dist_functions.jl")
 include("sampling_functions.jl")
 include("stepsize.jl")
-include("structs.jl")
 include("surrogate.jl")
 
 end

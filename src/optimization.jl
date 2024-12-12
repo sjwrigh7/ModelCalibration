@@ -19,11 +19,12 @@ Returns
 Details
 This function returns the SSE between the surrogate model and experimental data, for finding the maximum likelihood values of θ. Because the mean and covariance parameters are separable, minimizing the SSE will find the MLE for θ.
 """
-function theta_opt(theta::Vector{Float64})
-    response = predict_y_all(theta)
-    sse = sum((response .- data.exp.y).^2)
-    return sse
-end
+#function theta_opt(theta::Vector{Float64})
+#    response = predict_y_all(theta,Main.model)
+#    sse = sum((response .- Main.data.exp.y).^2)
+#    return sse
+#end
+
 
 """
     max_lik_theta(epochs::Int=7000,ntheta::Int)
@@ -31,8 +32,8 @@ Function to find the MLE of θ.
 
 ---
 Keyword arguments
-* `epochs::Int` The number of optimization epochs. Default value of 7000.
 * `ntheta::Int` The number of dimensions of θ.
+* `epochs::Int` The number of optimization epochs. Default value of 7000.
 
 ---
 Returns
@@ -42,7 +43,12 @@ Returns
 Details
 This function calls the `BlackBoxOptim.jl` differential evolutionary optimizer on `theta_opt`, and returns the best candidate from the optimization.
 """
-function max_lik_theta(epochs::Int=7000,ntheta)
+function max_lik_theta(ntheta::Int,model,data,epochs::Int=7000)
+    function theta_opt(theta::Vector{Float64})
+        response = predict_y_all(theta,Main.model)
+        sse = sum((response .- Main.data.exp.y).^2)
+        return sse
+    end
     theta_vals = bboptimize(theta_opt; SearchRange = [(0.0,1.0) for i in 1:ntheta],NumDimensions=ntheta,MaxSteps=epochs)
     theta_mle = best_candidate(theta_vals)
     return theta_mle
@@ -64,10 +70,7 @@ Returns
 Details
 This function utilizes the `Distributions.jl` framework for calculating the log likelihood. The API call used in this function uses the standard deviation for the MVN distribution when a scalar value is supplied for the covariance matrix.
 """
-function var_opt(sig::Float64)
-    neg_lik = -logpdf(MvNormal(opt_response,sig[1]),data.exp.y)[1]
-    return neg_lik
-end
+
 
 """
     max_lik_sigma(epochs::Int=7000)
@@ -81,9 +84,13 @@ Keyword arguments
 Returns
 * `sig_mle::Float64` The maximum likelihood estimate the standard deviation, whose square when multiplied by the identity matrix, gives the covariance matrix for the data model.
 """
-function max_lik_sigma(epochs::Int=7000)
-    sig_values = bboptimize(var_opt; SearchRange=[(1e-10,100)], NumDimensions=1, MaxSteps=epochs)
-    sig_mle = best_candidate(sig_values)
+function max_lik_sigma(opt_response,data,epochs::Int=7000)
+    function var_opt(sig::Vector{Float64})
+        neg_lik = -logpdf(MvNormal(opt_response,sig[1]),data.exp.y)[1]
+        return neg_lik
+    end
+    sig_values = bboptimize(var_opt; SearchRange=(1e-10,100), NumDimensions=1, MaxSteps=epochs)
+    sig_mle = best_candidate(sig_values)[1]
     return sig_mle
 end
 
@@ -101,8 +108,8 @@ Keyword arguments
 Returns
 * `covar::Array{Float64}` The covariance matrix.
 """
-function make_covar(tau2::Float64,nobs::Int)
-    covar = tau2 .* Matrix(1.0I,nobs,nobs)
+function make_covar(tau2::Float64,nloc::Int)
+    covar = tau2 .* Matrix(1.0I,nloc,nloc)
     return covar
 end
 
@@ -120,10 +127,10 @@ Keyword arguments
 Returns
 * `covar::Array{Float64}` The covariance matrix.
 """
-function make_covar(params::CovarPars,nobs::Int)
+function make_covar(params::CovarPars,nloc::Int,nx::Int)
     rho_vec = repeat([params.rho],nx)
-    corr_mat = correlation_construct(rho_vec,data.exp.x,nx,nobs)
-    covar = params.tau2 .* Matrix(1.0I,nobs,nobs) .+ params.sig2*corr_mat
+    corr_mat = correlation_construct(rho_vec,data.exp.x,nx,nloc)
+    covar = params.tau2 .* Matrix(1.0I,nloc,nloc) .+ params.sig2*corr_mat
     return covar
 end
 
@@ -161,7 +168,16 @@ Keyword arguments
 Returns
 * `covar_par_mle::Vector{Float64}` The MLE values of the covariance matrix hyperparameters.
 """
-function max_lik_covar(epochs::Int=7000)
+function max_lik_covar(nx::Int,nloc::Int,data,epochs::Int=7000)
+    function covar_opt(covar_pars::Vector{Float64})
+        tau2 = covar_pars[1]
+        sig2 = covar_pars[2]
+        rho = covar_pars[3]
+        params = CovarPars(tau2=tau2,rho=rho,sig2=sig2)
+        covar = make_covar(params,nloc,nx)
+        neg_lik = -logpdf(MvNormal(opt_response,covar),data.exp.y)
+        return neg_lik
+    end
     covar_par_vals = bboptimize(covar_opt; SearchRange=[(1e-10,100),(1e-10,100),(0.001,0.999)], NumDimensions=3, MaxSteps=epochs)
     covar_par_mle = best_candidate(covar_par_vals)
     return covar_par_mle
@@ -182,11 +198,11 @@ Returns
 * `theta_mle::Vector{Float64}` MLE for θ.
 * `var_mle::Float64` MLE of the variance parameter for an identity-based covariance matrix.
 """
-function get_mle(data::DataStr,nx::Int,ntheta::Int)
-    theta_mle = max_lik_theta(ntheta=ntheta)
-    opt_response = predict_y_all(theta_mle)
-    var_mle = max_lik_sig()^2
-    covar = make_covar(var_mle,nobs)
+function get_mle(data::DataStr,nx::Int,nloc::Int,ntheta::Int,model,epochs::Int=7000)
+    theta_mle = max_lik_theta(ntheta,model,data,epochs)
+    opt_response = predict_y_all(theta_mle,model)
+    var_mle = max_lik_sigma(opt_response,data,epochs)^2
+    covar = make_covar(var_mle,nloc)
     return theta_mle,covar
 end
 

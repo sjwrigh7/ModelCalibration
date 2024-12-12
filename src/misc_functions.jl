@@ -84,8 +84,9 @@ function setup(design_raw::Array{Float64},simobs_raw::Vector{Float64},
     # format Data
     data = format_data(design_norm,simobs_norm,expobs_norm,nx)
 
-    priors = format_prior_hyperparameters(data,alpha_tau2,beta_tau2,
-    alpha_sig2,beta_sig2,a_rho,b_rho,nx,ntheta)
+    priors = format_prior_hyperparameters(data,alpha_tau2,
+    beta_tau2,alpha_sig2,beta_sig2,
+    a_rho,b_rho,nx,ntheta)
 
     if data.exp.x != data.sim.x
         println("Number of experimental observations: ",size(data.exp.x)[1])
@@ -121,8 +122,14 @@ function unnormalize_var(var::Array{Float64},scales::ScalePar)
     if num_dims == 1
         output .= var .* (scales.max - scales.min) .+ scales.min
     elseif num_dims == 2
-        for i in 1:size(var)[2]
-            output[:,i] .= var[:,i] .* (scales.max[i] - scales.min[i]) .+ scales.min[i]
+        if length(scales.min) == 1
+            for i in 1:size(var)[2]
+                output[:,i] .= var[:,i] .* (scales.max - scales.min) .+ scales.min
+            end
+        else
+            for i in 1:size(var)[2]
+                output[:,i] .= var[:,i] .* (scales.max[i] - scales.min[i]) .+ scales.min[i]
+            end
         end
     else
         error("The Array passed to be normalized has too many dimensions and I don't know how to handle it.
@@ -153,8 +160,14 @@ function normalize_var(var::Array{Float64},scales::ScalePar)
     if num_dims == 1
         output .= (var .- scales.min) ./ (scales.max - scales.min)
     elseif num_dims == 2
-        for i in 1:size(var)[2]
-            output[:,i] .= (var[:,i] .- scales.min[i]) ./ (scales.max[i] - scales.min[i])
+        if length(scales.min) == 1
+            for i in size(var)[2]
+                output[:,i] .= (var[:,i] .- scales.min) ./ (scales.max - scales.min)
+            end
+        else
+            for i in 1:size(var)[2]
+                output[:,i] .= (var[:,i] .- scales.min[i]) ./ (scales.max[i] - scales.min[i])
+            end
         end
     else
         error("The Array passed to be normalized has too many dimensions and I don't know how to handle it.
@@ -246,7 +259,12 @@ function pivot_data_wide(x::Array{Float64},y::Vector{Float64})
         Number of response values: ",length(y))
     end
 
-    num_rep = round(Int,size(x)[1]/num_loc)
+    if size(x)[1]/num_loc - floor(size(x)[1]/num_loc) != 0
+        error("There was an error pivoting the data to a wider matrix")
+    else
+        num_rep = round(Int,(size(x)[1]/num_loc))
+    end
+
 
     if Int(num_rep)*Int(num_loc) != size(x)[1]
         error("The number of repeated observations and length of observed MVN data points per observation do not align with the total number of experimental data points
@@ -298,7 +316,7 @@ Keyword arguments
 Returns
 * `data::data_str` The data structure containing the `sim_str` and `exp_str` data structures housing the computer simulator and experimental data, respectively.
 """
-function format_data(design::Array{Float64},simobs::Array{Float64},
+function format_data(design::Array{Float64},simobs::Vector{Float64},
     expobs::Array{Float64},nx::Int64)
     sim_x = design[:,1:nx]     #pull x vars from sim data
     sim_theta = design[:,(nx+1):end] # pull theta vars from sim data
@@ -309,6 +327,7 @@ function format_data(design::Array{Float64},simobs::Array{Float64},
 
     x_unique_exp,y_wide_exp = pivot_data_wide(exp_x,exp_y)
     x_unique_sim,y_wide_sim = pivot_data_wide(sim_x,sim_y)
+    
     sim = SimStr(x_unique_sim,y_wide_sim,sim_theta_unique,
     sim_x,sim_y,sim_theta) # store in data structs
     exp = ExpStr(x_unique_exp,y_wide_exp,exp_x,exp_y)
@@ -359,6 +378,6 @@ function format_prior_hyperparameters(data::DataStr,alpha_tau2::Float64,
     tau2 = PriorVar(alpha_tau2,beta_tau2)
     sig2 = PriorVar(alpha_sig2,beta_sig2)
     rho = PriorVar(a_rho,b_rho)
-    priors = PriorData(theta,tau2,sig2,rho)
+    priors = PriorData(theta=theta,tau2=tau2,sig2=sig2,rho=rho)
     return priors
 end

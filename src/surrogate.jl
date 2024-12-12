@@ -50,6 +50,30 @@ function surrogate_model(x::Array{Float64},theta::Array{Float64},
 end
 
 """
+
+"""
+function train_model!(model;epochs::Int=2500,make_plots::Bool=true,
+    save_plots::Bool=true,show_plots::Bool=true,mdl_apnd::String="")
+    model_chains = [ess(model[i],nIter=epochs) for i in eachindex(model)]
+
+    #println(typeof(model_chains))
+    #println(typeof(model_chains[1]))
+    #return model_chains
+    if make_plots
+        for i in eachindex(model)
+            p = Plots.plot(model_chains[i]',label=false)
+            title!("Trace Plot for GPM $i Training")
+            xlabel!("Iteration")
+            ylabel!("Draw Value")
+
+            save_plots ? Plots.savefig(p,"$(mdl_apnd)_surrogate_model_$i-trace_plot.png") :
+                nothing
+            show_plots ? Plots.display(p) : nothing
+        end
+    end
+end
+
+"""
     predict_y_all(theta_settings::Vector{Float64},model::Vector{GPE})
 
 Function to get the default surrogate model output for a specified input setting.
@@ -62,7 +86,7 @@ Keyword arguments
 Returns
 * `responses:Vector{Float64}` Vector of p responses of the surrogate model, for the p control variable settings on which it is trained.
 """
-function predict_y_all(theta_settings::Vector{Float64},model::Vector{GPE})
+function predict_y_all(theta_settings::Vector{Float64},model)
     responses = Vector{Float64}(undef,length(model))
     for i in eachindex(model)
         result = GaussianProcesses.predict_y(model[i],permutedims(theta_settings'))[1][1]

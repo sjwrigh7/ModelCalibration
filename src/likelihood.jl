@@ -24,9 +24,9 @@ Let η be the surrogate model's prediction of the response variabeles, y, for th
 The likelihood is calculated following:
 L(θ,τ^2,δ|y)=∏^m [MVN(η+δ,τ^2*I)]
 """
-function lik(data::DataStr,vars::UpdatedVars)
+function lik(data::DataStr,vars::UpdatedVars,model)
 
-    eta = predict_y_all(vars.theta) #surogate modle est
+    eta = predict_y_all(vars.theta,model) #surogate modle est
 
     delta = vars.delta                                #pull disc fun
     mean = eta + delta                                #model est
@@ -38,7 +38,7 @@ function lik(data::DataStr,vars::UpdatedVars)
     covariance = covariance + Matrix(sqrt(eps(Float64))I,sz,sz)
     covariance = 0.5*(covariance' + covariance)    #ensure symmetry for stability
 
-    likelihood = prod(pdf(MvNormal(mean,covariance)response)) #likelihood
+    likelihood = prod(pdf(MvNormal(mean,covariance),response)) #likelihood
 
     return likelihood
 end
@@ -62,21 +62,20 @@ Similar functionality to the non-log likelihood function.
 This function uses the log of the pdf of the data model.
 L(θ,τ^2,δ|y)=Σ^m [log(MVN(η+δ,τ^2*I))]
 """
-function loglik(data::DataStr,vars::UpdatedVars)
+function loglik(data::DataStr,theta::Vector{Float64},
+    delta::Vector{Float64},tau2::Float64,model)
 
-    eta = predict_y_all(vars.theta) #surogate modle est
+    eta = predict_y_all(theta,model) #surogate modle est
 
-    delta = vars.delta                                #pull disc fun
     mean = eta + delta                                #model est
     response = data.exp.y                             #repsonse data
     sz = size(eta)[1]
 
-    tau2 = vars.tau2[1,1]                             #pull tau^2
     covariance = tau2*Matrix(1.0I,sz,sz)              #calculate covar matrix
     covariance = covariance + Matrix(sqrt(eps(Float64))I,sz,sz)
     covariance = 0.5*(covariance' + covariance)    #ensure symmetry for stability
 
-    log_likelihood = sum(logpdf(MvNormal(mean,covariance)response)) #likelihood
+    log_likelihood = sum(logpdf(MvNormal(mean,covariance),response)) #likelihood
 
     return log_likelihood
 end
@@ -120,7 +119,7 @@ function lik_nox(data::DataStr,vars::UpdatedVars)
 end
 
 """
-    log_lik_nox(data::DataStr,vars::UpdatedVars,thetas::Vector{Float64})
+    loglik_nox(data::DataStr,vars::UpdatedVars,thetas::Vector{Float64})
 A special implementation of the likelihood function for a case where there are no control variables (x) in the model i.e. the data model is a univariate normal distribution.
 The univariate normal distribution data model allows for improved computational efficiency in this function compared to the general likelihood function implementation.
 
@@ -142,7 +141,7 @@ Let η be the surrogate model's prediction of the response variabeles, y, for th
 The likelihood is calculated following:
 L(θ,τ^2|y)=Σ^m [log(N(η,τ))]
 """
-function lik_nox(data::DataStr,vars::UpdatedVars)
+function loglik_nox(data::DataStr,vars::UpdatedVars)
     
     thetas_model = thetas'
     eta = predict_y_all(hcat(data.exp.x,thetas_model))
@@ -152,7 +151,7 @@ function lik_nox(data::DataStr,vars::UpdatedVars)
 
     response = data.exp.y
 
-    likelihood = sum(logpdf.(Normal(mean,sqrt(tau2)),response))
+    log_likelihood = sum(logpdf.(Normal(mean,sqrt(tau2)),response))
 
-    return likelihood
+    return log_likelihood
 end

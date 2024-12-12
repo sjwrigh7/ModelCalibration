@@ -16,14 +16,14 @@ Optional arguments
 """
 function normalize_samples(samples::BulkVarsStruct,scales::Scaling,rev::Bool=true)
 
-    theta .= rev ? unnormalize_var(samples.theta,scales.theta) : 
+    theta = rev ? unnormalize_var(samples.theta,scales.theta) : 
         normalize_var(samples.theta,scales.theta)
-    sig2 .= rev ? (unnormalize_var(sqrt.(samples.sig2),scales.y)).^2 :
-        (normalize_var(sqrt.(samples.sig2),scales.y)).^2
-    delta .= rev ? unnormalize_var(samples.delta,scales.y) :
-        normalize_var(samples.delta,scales.y)
-    tau2 .= rev ? (unnormalize_var(sqrt.(samples.tau2),scales.y)).^2 :
-        (normlize_var(sqrt.(samples.tau2),scales.y)).^2
+    sig2 = rev ? (unnormalize_var(sqrt.(samples.sig2),scales.y) .- scales.y.min).^2 :
+        (normalize_var(sqrt.(samples.sig2 .+ scales.y.min),scales.y)).^2
+    delta = rev ? unnormalize_var(samples.delta,scales.y) .- scales.y.min :
+        normalize_var(samples.delta .+ scales.y.min,scales.y)
+    tau2 = rev ? (unnormalize_var(sqrt.(samples.tau2),scales.y) .- scales.y.min).^2 :
+        (normlize_var(sqrt.(samples.tau2 .+ scales.y.min),scales.y)).^2
     
     samples_norm = BulkVarsStruct(theta=theta,tau2=tau2,sig2=sig2,delta=delta,
         rho=samples.rho,accept=samples.accept,ratio=samples.ratio)
@@ -91,12 +91,13 @@ function remove_burn(samples::BulkVarsStruct,nburn::Int)
         Specified burn = $nburn")
     end
     keep = nburn + 1
+    retained = keep:length(samples.sig2)
     theta = samples.theta[retained,:]
     rho = samples.rho[retained,:]
     tau2 = samples.tau2[retained]
     sig2 = samples.sig2[retained]
     delta = samples.delta[retained,:]
-    accept = samples.delta[retained,:]
+    accept = samples.accept[retained,:]
     ratio = samples.ratio[retained,:]
 
     truncated = BulkVarsStruct(theta=theta,rho=rho,tau2=tau2,sig2=sig2,
@@ -181,7 +182,7 @@ function thin_samples(samples::BulkVarsStruct,nthin::Int)
     tau2 = samples.tau2[retained]
     sig2 = samples.sig2[retained]
     delta = samples.delta[retained,:]
-    accept = samples.delta[retained,:]
+    accept = samples.accept[retained,:]
     ratio = samples.ratio[retained,:]
 
     thinned = BulkVarsStruct(theta=theta,rho=rho,tau2=tau2,sig2=sig2,
@@ -279,39 +280,69 @@ Keyword arguments
 * `show_plots::Bool` Indicator of whether to display the plot that is generated.
 """
 function posterior_hist!(data::Array{Float64},nbins::Int,var::String,iter::Int,
-    save_plots::Bool,show_plots::Bool)
+    save_plots::Bool,show_plots::Bool,mdl_apnd::String)
 
-    params = fit(Histogram,data,nbins=nbins)
-    if (length(params.edges)-1) != length(params.weights)
-        error("There was an error in the bin and count calculations for the posterior histograms.
-        Please try using a different number of bins.")
+    if length(size(data)) == 1
+        params = fit(Histogram,data,nbins=nbins)
+        if (length(params.edges[1])-1) != length(params.weights)
+            error("There was an error in the bin and count calculations for the posterior histograms.
+            Please try using a different number of bins.
+            Number of edges = $(length(params.edges))
+            Number of weights = $(length(params.weights))")
+        end
+        areas = [(params.edges[1][i+1]-params.edges[1][i])*
+            params.weights[i] for i in eachindex(params.weights)]
+        p = Plots.bar(params.edges,params.weights/sum(areas),label=false,
+            left_margin=5mm,top_margin=5mm,titleposition=[0.5,1.05])
+        StatsPlots.density!(data,label=false,lw=5,trim=true)
+    elseif length(size(data)) == 2
+        params = [fit(Histogram,data[:,i],nbins=nbins) for i in axes(data)[2]]
+        bounds = [collect(params[i].edges[1]) for i in eachindex(params)]
+        bounds = reduce(vcat,bounds)
+        if (length(params[1].edges[1])-1) != length(params[1].weights)
+            error("There was an error in the bin and count calculations for the posterior histograms.
+            Please try using a different number of bins.
+            Number of edges = $(length(params.edges))
+            Number of weights = $(length(params.weights))")
+        end
+        areas = [[(params[j].edges[1][i+1]-params[j].edges[1][i])*
+            params[j].weights[i] for i in eachindex(params[j].weights)] for j in eachindex(params)]
+        p = Plots.bar(params[1].edges,params[1].weights/sum(areas[1]),label=false,
+        left_margin=5mm,top_margin=5mm,titleposition=[0.5,1.05])
+        for i in 2:length(areas)
+            Plots.bar!(params[i].edges,params[i].weights/sum(areas[i]),label=false)
+        end
+        for i in eachindex(areas)
+            StatsPlots.density!(data[:,i],color=i,label=false,trim=true)
+        end
+        #println(minimum(bounds))
+        #println(maximum(bounds))
+        xlims!((0.95*minimum(bounds),1.05*maximum(bounds)))
     end
-    areas = [(params.edges[1][i+1]-params.edges[1][i])*
-        params.weights[i] for i in eachindex(params.weights)]
-    p = Plots.bar(params.edges,params.weights/sum(areas),label=false)
-    StatsPlots.density!(data,label=false,lw=5)
+
     if iter == 0
-        title!(LaTexString("\$"*"\\"*"$(var)\$ Posterior Distribution"))
-        xlabel!(LaTexString("\$"*"\\"*"$(var)\$"))
-        ylabel!(LaTexString("\$p("*"\\"*"$(var)|y)\$"))
+        title!(LaTeXString("\$"*"\\"*"$(var)\$ Posterior Distribution"))
+        xlabel!(LaTeXString("\$"*"\\"*"$(var)\$"))
+        ylabel!(LaTeXString("\$p("*"\\"*"$(var)|y)\$"))
     else    
-        title!(LaTexString("\$"*"\\"*"$(var)_{$iter}\$ Posterior Distribution"))
-        xlabel!(LaTexString("\$"*"\\"*"$(var)_{$iter}\$"))
-        ylabel!(LaTexString("\$p("*"\\"*"$(var)_{$iter}|y)\$"))
+        title!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Posterior Distribution"))
+        xlabel!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$"))
+        ylabel!(LaTeXString("\$p("*"\\"*"$(var)_{$iter}|y)\$"))
     end
-    save_plots ? Plots.savefig(p,"$var-posterior_dist.png") : nothing
+    save_plots ? Plots.savefig(p,"$(mdl_apnd)_$var-posterior_dist.png") : nothing
     show_plots ? Plots.display(p) : nothing
 end
 
 """
 
 """
-function plot_correlation(data::Array{Float64},var::String,save_plots::Bool,show_plots::Bool)
-    labs = [LaTeXString("\$\\$var_{$i}\$") for i in axes(data)[2]]
+function plot_correlation(data::Array{Float64},var::String,save_plots::Bool,
+    show_plots::Bool,mdl_apnd::String)
+    labs = [LaTeXString("\$\\$(var)_{$i}\$") for i in axes(data)[2]]
     p = StatsPlots.corrplot(data,label=labs)
-    title!(LaTexString("\$"*"\\"*"$(var)\$ Correlation"))
+    title!(LaTeXString("\$"*"\\"*"$(var)\$ Correlation"))
 
-    save_plots ? Plots.savefig(p,"$var-correlation.png") : nothing
+    save_plots ? Plots.savefig(p,"$(mdl_apnd)_$var-correlation.png") : nothing
     show_plots ? Plots.display(p) : nothing
 end
 
@@ -330,19 +361,20 @@ Keyword arguments
 * `show_plots::Bool` Indicator of whether to display the plot that is generated.
 """
 function trace_plot!(data::Array{Float64},var::String,iter::Int,
-    save_plots::Bool,show_plots::Bool)
+    save_plots::Bool,show_plots::Bool,mdl_apnd::String)
 
-    p = Plots.plot(data,label=false)
+    p = Plots.plot(data,label=false,
+    left_margin=5mm,top_margin=5mm,titleposition=[0.5,1.05])
     if iter == 0
-        title!(LaTexString("\$"*"\\"*"$(var)\$ Trace Plot"))
-        ylabel!(LaTexString("\$"*"\\"*"$(var)\$ Draw Value"))
-        xlabel!(LaTexString("\$"*"\\"*"$(var)\$ Iteration"))
+        title!(LaTeXString("\$"*"\\"*"$(var)\$ Trace Plot"))
+        ylabel!(LaTeXString("\$"*"\\"*"$(var)\$ Draw Value"))
+        xlabel!(LaTeXString("\$"*"\\"*"$(var)\$ Iteration"))
     else    
-        title!(LaTexString("\$"*"\\"*"$(var)_{$iter}\$ Trace Plot"))
-        ylabel!(LaTexString("\$"*"\\"*"$(var)_{$iter}\$ Draw Value"))
-        xlabel!(LaTexString("\$"*"\\"*"$(var)_{$iter}\$ Iteration"))
+        title!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Trace Plot"))
+        ylabel!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Draw Value"))
+        xlabel!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Iteration"))
     end
-    save_plots ? Plots.savefig(p,"$var-trace_plot.png") : nothing
+    save_plots ? Plots.savefig(p,"$(mdl_apnd)_$var-trace_plot.png") : nothing
     show_plots ? Plots.display(p) : nothing
 end
 
@@ -359,16 +391,19 @@ Keyword arguments
 Returns
 * `p` The generated plot.
 """
-function plot_credible_bounds(data::Array{Float64},x_coords::Array{Float64})
+function plot_credible_bounds(data::Array{Float64},x_coords::Array{Float64},scales::ScalePar)
+    x_coords = round.(unnormalize_var(x_coords,scales),digits=4)
     ticks = Vector{String}(undef,size(x_coords)[1])
     for i in axes(x_coords)[1]
-        temp = [LaTeXString("x_{$j}") for j in axes(x_coords)[2]]
+        temp = [LaTeXString("\$x_{$j}=$(x_coords[i,j])\$") for j in axes(x_coords)[2]]
         ticks[i] = join(temp,";\n")
     end
-    p = StatsPlots.errorline(data',errorstyle=:plume,label=false)
-    StatsPlots.errorline!(data',errorstyle=:ribbon,errortype=:percentile,percentiles=[2.5,97.5])
-    xticks!(axes(x_coords)[1],ticks)
-    xlabel!("Control Variable Coordinates")
+    p = StatsPlots.errorline(data',errorstyle=:plume,label=false,secondarylinealpha=0.2,
+        right_margin=4mm)
+    StatsPlots.errorline!(data',errorstyle=:ribbon,errortype=:percentile,
+        percentiles=[2.5,97.5],label=false,secondarylinealpha=0.2,right_margin=4mm)
+    #xticks!(axes(x_coords)[1],ticks)
+    xlabel!("Control Variable Indices")
     return p
 end
 
@@ -384,18 +419,18 @@ Keyword arguments
 * `save_plots::Bool` Indicator of whether to save the plot that is generated.
 * `show_plots::Bool` Indicator of whether to display the plot that is generated.
 """
-function plot_disc!(delta::Array{Float64},x_coords::Array{Float64},
-    nbins::Int,save_plots::Bool,show_plots::Bool)
+function plot_disc!(delta::Array{Float64},x_coords::Array{Float64},scales::Scaling,
+    nbins::Int,save_plots::Bool,show_plots::Bool,mdl_apnd::String)
 
-    p = plot_creidlbe_bounds(delta,x_coords)
+    p = plot_credible_bounds(delta,x_coords,scales.x)
     title!("Discrepancy Function")
-    ylabel!(LaTeXString("\\delta(\\mathbf{x})"))
+    ylabel!(LaTeXString("\$\\delta(\\mathbf{x})\$"))
 
-    save_plots ? Plots.savefig(p,"$var-discrepancy_function.png") : nothing
+    save_plots ? Plots.savefig(p,"$(mdl_apnd)_$var-discrepancy_function.png") : nothing
     show_plots ? Plots.display(p) : nothing
 
-    posterior_hist!(delta',nbins,"delta",0,save_plots,show_plots)
-    trace_plot!(delta',"delta",0,save_plots,show_plots)
+    #posterior_hist!(permutedims(delta),nbins,"delta",0,save_plots,show_plots,mdl_apnd)
+    #trace_plot!((delta),"delta",0,save_plots,show_plots,mdl_apnd)
 
 end
 
@@ -411,53 +446,57 @@ Function to plot the surrogate model and data model estimations.
 * `save_plots::Bool` Indicator of whether to save the plot that is generated.
 * `show_plots::Bool` Indicator of whether to display the plot that is generated.
 """
-function plot_prediction!(thetas::Array{Float64},samples::BulkVarsStruct,data::DataStr,
-    scales::Scaling,save_plots::Bool,show_plots::Bool)
+function plot_prediction!(model,thetas::Array{Float64},samples::BulkVarsStruct,data::DataStr,
+    scales::Scaling,nx,save_plots::Bool,show_plots::Bool,mdl_apnd::String)
     
-    exp_resp = normalize_var(data.exp.y,scales.y)
+    exp_resp = unnormalize_var(data.exp.y,scales.y)
 
-    response = Array{Float64}(undef,size(thetas)[1],size(x_coords)[1])
-    for i in eachindex(response)
-        response[i,:] .= predict_y_all(thetas[i,:])
+    response = Array{Float64}(undef,size(thetas)[1],size(data.exp.x)[1])
+    for i in axes(response)[1]
+        response[i,:] .= predict_y_all(thetas[i,:],model)
     end
 
-    response .= normalize_var(response,scales.y)
+    response .= unnormalize_var(response,scales.y)
 
-    p = plot_credible_bounds(response,data.exp.x)
-    if length(size(exp_resp)) > 1
-        Plots.scatter!(exp_resp',color=4,label=false)
+    p = plot_credible_bounds(response,data.exp.x,scales.x)
+    if size(exp_resp)[2] > 1
+        Plots.scatter!(exp_resp,color=8,label=false)
     else
-        Plots.scatter!(exp_resp,color=4,label=false)
+        Plots.scatter!(exp_resp,color=8,label=false)
     end
     title!("Surrogate Model Prediction")
-    ylabel!(LaTeXString("\\eta(\\mathbf{x})"))
+    ylabel!(LaTeXString("\$\\eta (\\mathbf{x})\$"))
 
-    save_plots ? Plots.savefig(p,"calibrated_surrogate_model.png") : nothing
+    save_plots ? Plots.savefig(p,"$(mdl_apnd)_calibrated_surrogate_model.png") : nothing
     show_plots ? Plots.display(p) : nothing
 
-    p = plot_credible_bounds(response .+ samples.delta .+ samples.tau2,data.exp.x)
-    if length(size(exp_resp)) > 1
-        Plots.scatter!(exp_resp',color=4,label=false)
+    
+    p = plot_credible_bounds(response .+ samples.delta,data.exp.x,scales.x)
+    if size(exp_resp)[2] > 1
+        Plots.scatter!(exp_resp,color=8,label=false)
     else
-        Plots.scatter!(exp_resp,color=4,label=false)
+        Plots.scatter!(exp_resp,color=8,label=false)
     end
     title!("Data Model Prediction")
-    ylabel!(LaTeXString("\\eta(\\mathbf{x})+\\delta(\\mathbf{x})"))
+    ylabel!(LaTeXString("\$\\eta (\\mathbf{x})+\\delta (\\mathbf{x})\$"))
 
-    save_plots ? Plots.savefig(p,"calibrated_discrepancy_model.png") : nothing
+    save_plots ? Plots.savefig(p,"$(mdl_apnd)_calibrated_discrepancy_model.png") : nothing
     show_plots ? Plots.display(p) : nothing
 
-    if length(size(data.exp.y)) > 1
-        error = response .+ samples.delta .- mean(exp_resp)
+    if size(data.exp.y)[2] > 1
+        error = response .+ samples.delta .- mean(exp_resp,dims=2)'
     else
-        error = response .+ samples.delta .- exp_resp
+        error = response .+ samples.delta .- exp_resp'
     end
 
-    p = plot_credible_bounds(error,data.exp.x)
+    p = plot_credible_bounds(error,data.exp.x,scales.x)
     title!("Calibrated Model Error Estimation")
-    ylabel!(LaTeXString("y(\\mathbf{x}-\\eta(\\mathbf{x})+\\delta(\\mathbf{x})"))
+    ylabel!(LaTeXString("\$y(\\mathbf{x})-[\\eta(\\mathbf{x})+\\delta(\\mathbf{x})]\$"))
+    if size(exp_resp)[2] > 1
+        Plots.scatter!(exp_resp .- mean(exp_resp,dims=2),color=8,label=false)
+    end
 
-    save_plots ? Plots.savefig(p,"calibrated_model_error.png") : nothing
+    save_plots ? Plots.savefig(p,"$(mdl_apnd)_calibrated_model_error.png") : nothing
     show_plots ? Plots.display(p) : nothing
 end
 
@@ -474,7 +513,7 @@ Function to plot the surrogate model and data model estimations.
 * `show_plots::Bool` Indicator of whether to display the plot that is generated.
 """
 function plot_prediction!(thetas::Array{Float64},samples::GriddyPosteriors,data::DataStr,
-    scales::Scaling,save_plots::Bool,show_plots::Bool)
+    scales::Scaling,save_plots::Bool,show_plots::Bool,mdl_apnd::String)
     
     exp_resp = normalize_var(data.exp.y,scales.y)
 
@@ -494,7 +533,7 @@ function plot_prediction!(thetas::Array{Float64},samples::GriddyPosteriors,data:
     title!("Surrogate Model Prediction")
     ylabel!(LaTeXString("\\eta(\\mathbf{x})"))
 
-    save_plots ? Plots.savefig(p,"calibrated_surrogate_model.png") : nothing
+    save_plots ? Plots.savefig(p,"$(mdl_apnd)_calibrated_surrogate_model.png") : nothing
     show_plots ? Plots.display(p) : nothing
 
     if length(size(data.exp.y)) > 1
@@ -505,9 +544,9 @@ function plot_prediction!(thetas::Array{Float64},samples::GriddyPosteriors,data:
 
     p = plot_credible_bounds(error,data.exp.x)
     title!("Calibrated Model Error Estimation")
-    ylabel!(LaTeXString("y(\\mathbf{x}-\\eta(\\mathbf{x})+\\delta(\\mathbf{x})"))
+    ylabel!(LaTeXString("y(\\mathbf{x})-\\eta(\\mathbf{x})+\\delta(\\mathbf{x})"))
 
-    save_plots ? Plots.savefig(p,"calibrated_model_error.png") : nothing
+    save_plots ? Plots.savefig(p,"$(mdl_apnd)_calibrated_model_error.png") : nothing
     show_plots ? Plots.display(p) : nothing
 end
 
@@ -542,20 +581,20 @@ Keyword arguments
 * `nx::Int` number of x variables.
 * `ntheta::Int` number of theta variables.
 """
-function make_estimate_table(samples::BulkVarsStruct,nx::Int,ntheta::Int)
+function make_estimate_table(samples::BulkVarsStruct,nx::Int,ntheta::Int,mdl_apnd::String)
     if nx > 0
         estimates = Array{Float64}(undef,4,ntheta+nx+3)
         for i in 1:nx
             estimates[:,i+1] = get_estimates(samples.rho[:,i])
         end
         estimates[:,end-1] = get_estimates(samples.sig2)
-        var_labs = vcat(["Value"],[LaTeXString("\\rho_{$i}") for i in 1:nx],
-            [LaTeXString("\\theta_{$i}") for j in 1:ntheta],
-            [LaTeXString("\\sigma"),LaTeXString("\\tau")])
+        var_labs = vcat(["Value"],[LaTeXString("\$\\rho_{$i}\$") for i in 1:nx],
+            [LaTeXString("\$\\theta_{$j}\$") for j in 1:ntheta],
+            [LaTeXString("\$\\sigma\$"),LaTeXString("\$\\tau\$")])
     else
         estimates = Array{Float64}(undef,4,ntheta+3)
-        var_labs = vcat(["Value"],[LaTeXString("\\theta_{$i}") for j in 1:ntheta],
-            [LaTeXString("\\tau")])
+        var_labs = vcat(["Value"],[LaTeXString("\$\\theta_{$j}\$") for j in 1:ntheta],
+            [LaTeXString("\$\\tau\$")])
     end
     for i in 1:ntheta
         estimates[:,i+nx+1] = get_estimates(samples.theta[:,i])
@@ -563,13 +602,13 @@ function make_estimate_table(samples::BulkVarsStruct,nx::Int,ntheta::Int)
     estimates[:,end] = get_estimates(samples.tau2)
     param_labs = ["95% Lower Bound","Median","Mean","95% Upper Bound"]
     
-    estimates = string.(round(estimates,digits=5))
+    estimates = string.(round.(estimates,digits=5))
     estimates[:,1] = param_labs
 
-    pretty_table(estimates;header=var_lab)
+    pretty_table(estimates;header=var_labs)
 
-    open("param_estimates.txt","w") do file
-        pretty_table(file,estimates;header=var_lab)
+    open("$(mdl_apnd)_param_estimates.txt","w") do file
+        pretty_table(file,estimates;header=var_labs)
     end
 end
 
@@ -583,7 +622,7 @@ Keyword arguments
 * `nx::Int` number of x variables.
 * `ntheta::Int` number of theta variables.
 """
-function make_estimate_table!(samples::GriddyPosteriors,nx::Int,ntheta::Int)
+function make_estimate_table!(samples::GriddyPosteriors,nx::Int,ntheta::Int,mdl_apnd::String)
     if nx > 0
         estimates = Array{Float64}(undef,4,ntheta+4)
         estimates[:,2] = get_estimates(samples.rho)
@@ -607,7 +646,7 @@ function make_estimate_table!(samples::GriddyPosteriors,nx::Int,ntheta::Int)
 
     pretty_table(estimates;header=var_lab)
 
-    open("param_estimates.txt","w") do file
+    open("$(mdl_apnd)_param_estimates.txt","w") do file
         pretty_table(file,estimates;header=var_lab)
     end
 end
@@ -632,9 +671,9 @@ Optional arguments
 * `nbins::Int` The number of bins to use for histograms.
   * default value of 30
 """
-function post_process(samples::BulkVarsStruct,nx::Int,ntheta::Int,nburn::Int,
-    scales::Scaling,make_plots::Bool,save_plots::Bool,show_plots::Bool,
-    nthin::Int=20,nbins::Int=30)
+function post_process(samples::BulkVarsStruct,model,data::DataStr,nx::Int,ntheta::Int,
+    nburn::Int,scales::Scaling;make_plots::Bool=true,save_plots::Bool=true,
+    show_plots::Bool=true,nthin::Int=20,nbins::Int=30,mdl_apnd::String="")
 
     samples = remove_burn(samples,nburn)
     samples = thin_samples(samples,nthin)
@@ -644,24 +683,28 @@ function post_process(samples::BulkVarsStruct,nx::Int,ntheta::Int,nburn::Int,
     sqrt_variance!(scaled_samples)
 
     if make_plots
-        posterior_hist!(scaled_samples.tau2,nbins,"tau",0,save_plots,show_plots)
-        trace_plot!(scaled_samples.tau2,"tau",0,save_plots,show_plots)
-        posterior_hist!(scaled_samples.sig2,nbins,"sigma",0,save_plots,show_plots)
-        trace_plot!(scaled_samples.sig2,"sigma",0,save_plots,show_plots)
+        posterior_hist!(scaled_samples.tau2,nbins,"tau",0,save_plots,show_plots,mdl_apnd)
+        trace_plot!(scaled_samples.tau2,"tau",0,save_plots,show_plots,mdl_apnd)
+        posterior_hist!(scaled_samples.sig2,nbins,"sigma",0,save_plots,show_plots,mdl_apnd)
+        trace_plot!(scaled_samples.sig2,"sigma",0,save_plots,show_plots,mdl_apnd)
+        #plot_correlation(samples.theta,"theta",save_plots,show_plots,mdl_apnd)
         for theta in 1:ntheta
             posterior_hist!(scaled_samples.theta[:,theta],nbins,"theta",
-                theta,save_plots,show_plots)
+                theta,save_plots,show_plots,mdl_apnd)
             trace_plot!(scaled_samples.theta[:,theta],"theta",
-                theta,save_plots,show_plots)
+                theta,save_plots,show_plots,mdl_apnd)
         end
-        for rho in 1:nx
-            posterior_hist!(scaled_samples.rho[:,rho],nbins,"rho",rho,
-                save_plots,show_plots)
-            trace_plot!(scaled_samples.rho[:,rho],"rho",rho,
-                save_plots,show_plots)
+        if nx > 0
+            #plot_correlation(samples.rho,"rho",save_plots,show_plots,mdl_apnd)
+            for rho in 1:nx
+                posterior_hist!(scaled_samples.rho[:,rho],nbins,"rho",rho,
+                    save_plots,show_plots,mdl_apnd)
+                trace_plot!(scaled_samples.rho[:,rho],"rho",rho,
+                    save_plots,show_plots,mdl_apnd)
+            end
+            plot_disc!(scaled_samples.delta,data.exp.x,scales,nbins,save_plots,show_plots,mdl_apnd)
+            plot_prediction!(model,samples.theta,scaled_samples,data,scales,nx,save_plots,show_plots,mdl_apnd)
         end
-        plot_disc!(scaled_samples.delta,data.exp.x,nbins,save_plots,show_plots)
-        plot_prediction!(samples.theta,scaled_samples,data,scales,save_plots,show_plots)
     end
-    make_estimate_table(scaled_samples,nx,ntheta)
+    make_estimate_table(scaled_samples,nx,ntheta,mdl_apnd)
 end

@@ -52,19 +52,21 @@ C is the correlation structure. It is a size n square matrix with each element c
 C(x,x') = ∏(ρ^[4*(x-x')])
 The δ prior distribution density is evaluated by MVN(0,Σ)
 """
-function prior_delta(vars::UpdatedVars,data::DataStr,rho::Vector{Float64},
-    nx::Int64,nobs::Int64)
+function log_prior_delta(vars::UpdatedVars,data::DataStr,rho::Vector{Float64},
+    nx::Int64,nloc::Int64)
     
     delta = vars.delta        #pull delta
     sig2 = vars.sig2[1]       #pull sig2
     rho = rho                 #pull rho
+    #println(rho)
     x = data.exp.x            #pull x
 
     response = delta          
     mean = repeat([0],length(delta))  #mean of delta prior
 
-    covar = sig2*correlation_construct(rho,x,nx,nobs) #calc covar matrix
-    pdf_val = pdf(MvNormal(mean,covar),response)      #calculate pdf val
+    covar = sig2*correlation_construct(rho,x,nx,nloc) #calc covar matrix
+    #println(covar)
+    pdf_val = logpdf(MvNormal(mean,covar),response)      #calculate pdf val
     return pdf_val
 end
 """

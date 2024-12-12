@@ -100,7 +100,7 @@ Returns
 function get_full_fact(n::Int,ntheta::Int,bounds::Tuple{Vector{Float64}})
     fact_vals = Array{Float64}(undef,n,ntheta)
     for theta in 1:ntheta
-        fact_vals[:,theta,dim] = collecct(range(bounds[2][theta],bounds[1][theta],length=n))
+        fact_vals[:,theta,dim] = collect(range(bounds[2][theta],bounds[1][theta],length=n))
     end
     doe = Array{Float64}(undef,n^dim,dim)
     for j in axes(doe)[2]
