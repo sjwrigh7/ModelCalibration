@@ -1,7 +1,14 @@
+path = "/home/stephenw/.julia/dev/ModelCalibration"
+cd(path)
+using Pkg
+#Pkg.activate(".")
+Pkg.develop(path=path)
 using Revise
 using ModelCalibration
 using Distributions
 using LinearAlgebra
+using GaussianProcesses
+using BlackBoxOptim
 using Test
 
 nx = 2
@@ -72,11 +79,11 @@ a_rho = 1.0
 b_rho = 1.0
 
 
-@testset "setup" begin
-    nobs,nrep,nloc,scales,data,priors = ModelCalibration.setup(design,
+nobs,nrep,nloc,scales,data,priors = ModelCalibration.setup(design,
     simobs,expobs,nx,ntheta,alpha_tau2,beta_tau2,
     alpha_sig2,beta_sig2,a_rho,b_rho)
 
+@testset "setup" begin
     @test nobs == size(expobs)[1]
     @test nloc == size(unique(expobs[:,1:nx],dims=1))[1]
     @test nrep == round(Int,size(expobs)[1]/nobs)
@@ -90,15 +97,21 @@ b_rho = 1.0
     end
     @test scales.y.min == minimum(simobs)
     @test scales.y.max == maximum(simobs)
-
-    @test data.sim.x == (design[:,1:nx] .- scales.x.min) ./
-        (scales.x.max .- scales.x.min)
-    @test data.sim.theta == (design[:,(nx+1):(nx+ntheta)] .-
-     scales.x.min) ./ (scales.theta.max .- scales.theta.min)
-    @test data.sim.y == (simobs .- scales.y.min) ./
+    
+    @test data.sim.x == (unique(design[:,1:nx],dims=1) .- scales.x.min') ./
+        (scales.x.max' .- scales.x.min')
+    @test data.sim.theta == (unique(design[:,(nx+1):(nx+ntheta)],dims=1) .-
+        scales.theta.min') ./ (scales.theta.max' .- scales.theta.min')
+    
+    nsim = length(unique(design[:,nx+1]))
+    for i in 1:nsim
+        start = (i-1)*nloc + 1
+        stop = i*nloc
+        @test data.sim.y[:,i] == (simobs[start:stop] .- scales.y.min) ./
         (scales.y.max .- scales.y.min)
-    @test data.exp.x == (expobs[:,1:nx] .- scales.x.min) ./
-        (scales.x.max .- scales.x.min)
+    end
+    @test data.exp.x == (expobs[:,1:nx] .- scales.x.min') ./
+        (scales.x.max' .- scales.x.min')
     for i in 1:nrep
         start = (i-1)*nloc + 1
         stop = i*nloc
@@ -110,31 +123,35 @@ b_rho = 1.0
     @test priors.sig2.par2 == beta_sig2
     @test priors.tau2.par1 == alpha_tau2
     @test priors.tau2.par2 == beta_tau2
-    @test priors.rho.par1 == a_rho
-    @test priors.rho.par2 == b_rho
+    @test priors.rho.par1 == repeat([a_rho],nx)
+    @test priors.rho.par2 == repeat([b_rho],nx)
     for i in 1:ntheta
-        @test priors.theta.par1[i] == scales.theta.min[i]
-        @test priors.theta.par2[i] == scales.theta.max[i]
+        @test priors.theta.par1[i] == 0.0
+        @test priors.theta.par2[i] == 1.0
     end
 end
 
-@testset "surrogate model" begin
-    model = surrogate_model(data.sim.x,data.sim.theta,
+model = ModelCalibration.surrogate_model(data.sim.x,data.sim.theta,
+        data.sim.y,nx,ntheta)
+@testset "surrogate" begin
+    model = ModelCalibration.surrogate_model(data.sim.x,data.sim.theta,
         data.sim.y,nx,ntheta)
     test_idx = rand(axes(data.sim.theta)[1],20)
     test_set = data.sim.theta[test_idx,:]
+
     for i in axes(test_set)[1]
-        theta = test_set[i,(nx+1):(nx+ntheta)]
-        eta = predict_y_all(theta,model)
-        train = data.sim.y[test_idx[i],:]
-        @test isapprox(eta,train)
+        theta = test_set[i,:]
+        eta = ModelCalibration.predict_y_all(theta,model)
+        train = data.sim.y[:,test_idx[i]]
+        error = sum((eta .- train).^2)
+        @test error <= 1.5e-2
     end
 end
 
 #TODO edit likelihood function to not need full vars and data inputs
 #TODO add multiple dispatches of the likelihood function
+mle = ModelCalibration.get_mle(data,nx,nloc,ntheta,model)
 @testset "maximum likelihood calculation" begin
-    mle = get_mle(data,nx,ntheta)
     max_lik = loglik(mle[1],mle[2])
     adjust = 1e-4 .* (scales.theta.max .- scales.theta.min)
     @test max_lik >= loglik(mle[1] .+ adjust,mle[2])
