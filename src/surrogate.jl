@@ -42,7 +42,7 @@ function surrogate_model(x::Array{Float64},theta::Array{Float64},
     emulator_kern = [SE(repeat([0.0],ntheta),0.0) for i in 1:num_response_locations]
     model = [GP(theta',y[i,:],emulator_mean[i],emulator_kern[i]) for i in 1:num_response_locations]
     
-    for i in 1:length(model)
+    for i in eachindex(model)
     set_priors!(emulator_kern[i],repeat([Normal()],ntheta+1))
     set_priors!(model[i].logNoise,[Normal(-2.0,0.2)])
     end

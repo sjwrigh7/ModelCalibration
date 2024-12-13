@@ -33,17 +33,18 @@ end
 Function to evaluate the probability density function of the discrepancy term (δ) prior distribution.
 
 ---
-Keyword arguments
-* `vars::UpdatedVars` Struct containing values of the parameters to use for evaluating the prior distribution density function.
+Input arguments
 * `data::DataStr` Struct containing the experimental and computer simulator data.
+* `delta::Vector{Float64}` The value of delta at which to evaluate the distribution.
 * `rho::Vector{Float64}` A Vector of length p containing the ρ values for evaluating the prior distribution density function.
+* `sig2::Float64` The variance of the discrepancy function's covariance matrix.
 * `nx::Int64` The number of x variables in the model.
 * `nobs::Int64` The length of the data model (multivariate normal distribution) for a single independent observation.
 Note that `rho` are supplied separately from the other variables contained in `vars` to allow evaluation of the likelihood at different values of ρ without requiring altering the `vars` struct during Matropolis-Hastings updates.
 
 ---
 Returns
-* `pdf_val` The evaluation of the discrepancy term (δ) prior distribution density function.
+* `log_pdf_val` The log evaluation of the discrepancy term (δ) prior distribution density function.
 
 ---
 Details
@@ -52,22 +53,25 @@ C is the correlation structure. It is a size n square matrix with each element c
 C(x,x') = ∏(ρ^[4*(x-x')])
 The δ prior distribution density is evaluated by MVN(0,Σ)
 """
-function log_prior_delta(vars::UpdatedVars,data::DataStr,rho::Vector{Float64},
-    nx::Int64,nloc::Int64)
-    
-    delta = vars.delta        #pull delta
-    sig2 = vars.sig2[1]       #pull sig2
-    rho = rho                 #pull rho
-    #println(rho)
-    x = data.exp.x            #pull x
+function log_prior_delta(data::DataStr,delta::Vector{Float64},
+    rho::Vector{Float64},sig2::Float64,nx::Int64,nloc::Int64)
 
-    response = delta          
     mean = repeat([0],length(delta))  #mean of delta prior
 
-    covar = sig2*correlation_construct(rho,x,nx,nloc) #calc covar matrix
-    #println(covar)
-    pdf_val = logpdf(MvNormal(mean,covar),response)      #calculate pdf val
-    return pdf_val
+    covar = sig2*correlation_construct(rho,data.exp.x,nx,nloc) #calc covar matrix
+
+    log_pdf_val = logpdf(MvNormal(mean,covar),delta)      #calculate pdf val
+    return log_pdf_val
+end
+function log_prior_delta(delta::Vector{Float64},
+    corr::Array{Float64,2},sig2::Float64)
+
+    mean = repeat([0],length(delta))  #mean of delta prior
+
+    covar = sig2*corr #calc covar matrix
+
+    log_pdf_val = logpdf(MvNormal(mean,covar),delta)      #calculate pdf val
+    return log_pdf_val
 end
 """
     prior_rho(rho::Float64,prior_data::PriorData,k::Int64)

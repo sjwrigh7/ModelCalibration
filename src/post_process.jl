@@ -22,11 +22,13 @@ function normalize_samples(samples::BulkVarsStruct,scales::Scaling,rev::Bool=tru
         (normalize_var(sqrt.(samples.sig2 .+ scales.y.min),scales.y)).^2
     delta = rev ? unnormalize_var(samples.delta,scales.y) .- scales.y.min :
         normalize_var(samples.delta .+ scales.y.min,scales.y)
+    eta = rev ? unnormalize_var(samples.eta,scales.y) :
+        normalize_var(samples.eta,scales.y)
     tau2 = rev ? (unnormalize_var(sqrt.(samples.tau2),scales.y) .- scales.y.min).^2 :
         (normlize_var(sqrt.(samples.tau2 .+ scales.y.min),scales.y)).^2
     
     samples_norm = BulkVarsStruct(theta=theta,tau2=tau2,sig2=sig2,delta=delta,
-        rho=samples.rho,accept=samples.accept,ratio=samples.ratio)
+        eta=eta,rho=samples.rho,accept=samples.accept,ratio=samples.ratio)
     
     return samples_norm
 end
@@ -97,11 +99,12 @@ function remove_burn(samples::BulkVarsStruct,nburn::Int)
     tau2 = samples.tau2[retained]
     sig2 = samples.sig2[retained]
     delta = samples.delta[retained,:]
+    eta = samples.eta[retained]
     accept = samples.accept[retained,:]
     ratio = samples.ratio[retained,:]
 
     truncated = BulkVarsStruct(theta=theta,rho=rho,tau2=tau2,sig2=sig2,
-    delta=delta,accept=accept,ratio=ratio)
+    delta=delta,eta=eta,accept=accept,ratio=ratio)
     
     return truncated
 end
@@ -182,11 +185,12 @@ function thin_samples(samples::BulkVarsStruct,nthin::Int)
     tau2 = samples.tau2[retained]
     sig2 = samples.sig2[retained]
     delta = samples.delta[retained,:]
+    eta = samples.eta[retained,:]
     accept = samples.accept[retained,:]
     ratio = samples.ratio[retained,:]
 
     thinned = BulkVarsStruct(theta=theta,rho=rho,tau2=tau2,sig2=sig2,
-    delta=delta,accept=accept,ratio=ratio)
+    delta=delta,eta=eta,accept=accept,ratio=ratio)
     
     return thinned
 end
@@ -451,12 +455,7 @@ function plot_prediction!(model,thetas::Array{Float64},samples::BulkVarsStruct,d
     
     exp_resp = unnormalize_var(data.exp.y,scales.y)
 
-    response = Array{Float64}(undef,size(thetas)[1],size(data.exp.x)[1])
-    for i in axes(response)[1]
-        response[i,:] .= predict_y_all(thetas[i,:],model)
-    end
-
-    response .= unnormalize_var(response,scales.y)
+    response = samples.eta
 
     p = plot_credible_bounds(response,data.exp.x,scales.x)
     if size(exp_resp)[2] > 1
@@ -477,11 +476,32 @@ function plot_prediction!(model,thetas::Array{Float64},samples::BulkVarsStruct,d
     else
         Plots.scatter!(exp_resp,color=8,label=false)
     end
-    title!("Data Model Prediction")
+    title!("Data Model Samples")
     ylabel!(LaTeXString("\$\\eta (\\mathbf{x})+\\delta (\\mathbf{x})\$"))
 
     save_plots ? Plots.savefig(p,"$(mdl_apnd)_calibrated_discrepancy_model.png") : nothing
     show_plots ? Plots.display(p) : nothing
+
+    mean_eta = mean(response)
+    eta_bounds = Array{Float64}(undef,2,size(response)[2])
+    delta_bounds = similar(eta_bounds)
+    tau_bound = quantile(samples.tau2,[0.975])
+    epsilon_bounds = quantile(Normal(0,tau_bound),[0.025,0.975])
+    for i in axes(response)[2]
+        eta_bounds[:,i] = quantile(response[:,i],[0.025,0.975])
+        delta_bounds[:,i] = quantile(samples.delta[:,i],[0.025,0.975])
+    end
+    lb = eta_bounds[1,:] .+ delta_bounds[1,:] .+ epsilon_bounds[1]
+    ub = eta_bounds[2,:] .+ delta_bounds[2,:] .+ epsilon_bounds[2]
+    p = Plots.plot(mean_eta,label="Mean Surrogate Response")
+    Plots.plot!(exp_resp,label="Experimental Data")
+    Plots.plot!(lb,fillrange=ub,label="Uncertainty Bounds")
+    Plots.plot(ub,label=false)
+    
+    save_plots ? Plots.savefig(p,"$(mdl_apnd)_uncertainty.png") : nothing
+    show_plots ? Plots.display(p) : nothing
+
+
 
     if size(data.exp.y)[2] > 1
         error = response .+ samples.delta .- mean(exp_resp,dims=2)'
@@ -517,12 +537,8 @@ function plot_prediction!(thetas::Array{Float64},samples::GriddyPosteriors,data:
     
     exp_resp = normalize_var(data.exp.y,scales.y)
 
-    response = Array{Float64}(undef,size(thetas)[1],size(x_coords)[1])
-    for i in eachindex(response)
-        response[i,:] .= predict_y_all(thetas[i,:])
-    end
 
-    response .= normalize_var(response,scales.y)
+    response .= grid[theta,:]
 
     p = plot_credible_bounds(response,x_coords)
     if length(size(exp_resp)) > 1

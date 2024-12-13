@@ -184,6 +184,7 @@ Keyword arguments
     tau2::Vector{Float64}
     sig2::Vector{Float64}
     delta::Array{Float64}
+    eta::Array{Float64}
     rho::Array{Float64}
     accept::Array{Bool}
     ratio::Array{Float64}

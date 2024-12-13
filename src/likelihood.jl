@@ -80,6 +80,22 @@ function loglik(data::DataStr,theta::Vector{Float64},
     return log_likelihood
 end
 
+function loglik(data::DataStr,delta::Vector{Float64},tau2::Float64,
+    eta::Vector{Float64},nloc::Int)
+
+    mean = eta + delta                                #model est
+    response = data.exp.y                             #repsonse data
+
+    ident = Matrix(1.0I,nloc,nloc)
+    covariance = tau2 .* ident              #calculate covar matrix
+    covariance = covariance + sqrt(eps(Float64)) .* ident
+    covariance = 0.5*(covariance' + covariance)    #ensure symmetry for stability
+
+    log_likelihood = sum(logpdf(MvNormal(mean,covariance),response)) #likelihood
+
+    return log_likelihood
+end
+
 """
     lik_nox(data::DataStr,vars::UpdatedVars,thetas::Vector{Float64})
 A special implementation of the likelihood function for a case where there are no control variables (x) in the model i.e. the data model is a univariate normal distribution.

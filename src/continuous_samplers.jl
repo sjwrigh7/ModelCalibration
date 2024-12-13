@@ -88,12 +88,20 @@ Then, samples are drawn from the posterior distributions using the following:
 * Gibbs updates for τ^2, σ^2, δ
 """
 function mcmc!(model,data::DataStr,prior_data::PriorData,
-    bulk_vars::BulkVarsStruct,start::Int,stop::Int,
+    sample_vals::BulkVarsStruct,start::Int,stop::Int,
     stepsize::StepSize,nx::Int,ntheta::Int,nloc::Int)
 
-    step_vars = UpdatedVars(theta=bulk_vars.theta[start-1,:],
-        delta=bulk_vars.delta[start-1,:],tau2=bulk_vars.tau2[start-1],
-        sig2=bulk_vars.sig2[start-1],rho=bulk_vars.rho[start-1,:])
+    nrep = size(data.exp.y)[2]
+    nloc = size(data.exp.y)[1]
+    lik_power = prod(size(data.exp.y))
+
+    delta = copy(sample_vals.delta[start-1,:])
+    theta = copy(sample_vals.theta[start-1,:])
+    rho = copy(sample_vals.rho[start-1,:])
+    tau2 = sample_vals.tau2[start-1]
+    sig2 = sample_vals.sig2[start-1]
+    eta = sample_vals.eta[start-1,:]
+    corr = Array{Float64}(undef,nloc,nloc)
 
     if size(data.exp.x)[2] == 0
         #precompute for univariate likelihood
@@ -104,17 +112,17 @@ function mcmc!(model,data::DataStr,prior_data::PriorData,
             #metropolis update for θ
             @inbounds for j in 1:ntheta
                 theta_step = metropolis_theta_nox(model,prior_data,data,
-                    step_vars.theta,step_vars.delta,step_vars.tau2,
-                    j,stepsize.theta[j])
-                step_vars.theta[j] = theta_step.new_value
-                bulk_vars.theta[i,j] = step_vars.theta[j]
-                bulk_vars.accept[i,j+nx] = theta_step.accept
-                bulk_vars.ratio[i,j+nx] = theta_step.ratio
+                    theta,delta,tau2,j,stepsize.theta[j])
+                
+                theta[j] = theta_step.new_value
+                sample_vals.theta[i,j] = theta[j]
+                sample_vals.accept[i,j+nx] = theta_step.accept
+                sample_vals.ratio[i,j+nx] = theta_step.ratio
             end
 
             #gibbs update for τ^2
-            step_vars.tau2 = gibbs_tau2(prior_data,data,step_vars)
-            bulk_vars.tau2[i] = step_vars.tau2
+            tau2 = gibbs_tau2(prior_data,data,eta,delta,lik_power,nrep)
+            sample_vals.tau2[i] = tau2
         end
 
     else
@@ -122,31 +130,36 @@ function mcmc!(model,data::DataStr,prior_data::PriorData,
             #metropolis update for θ
             @inbounds for j in 1:ntheta
                 theta_step = metropolis_theta(model,prior_data,data,
-                    step_vars.theta,step_vars.delta,step_vars.tau2,
-                    j,stepsize.theta[j])
-                step_vars.theta[j] = theta_step.new_value
-                bulk_vars.theta[i,j] = step_vars.theta[j]
-                bulk_vars.accept[i,j+nx] = theta_step.accept
-                bulk_vars.ratio[i,j+nx] = theta_step.ratio
+                    theta,delta,tau2,j,stepsize.theta[j],nloc)
+
+                eta .= theta_step[2]
+                theta[j] = theta_step[1].new_value
+                sample_vals.theta[i,j] = theta[j]
+                sample_vals.accept[i,j+nx] = theta_step[1].accept
+                sample_vals.ratio[i,j+nx] = theta_step[1].ratio
             end
+            sample_vals.eta[i,:] .= eta
             #metropolis update for ρ
             @inbounds for j in 1:nx
-                rho_step = metropolis_rho(prior_data,data,step_vars,  
-                j,stepsize.rho[j],nx,nloc)
-                step_vars.rho[j] = rho_step.new_value
-                bulk_vars.rho[i,j] = step_vars.rho[j]
-                bulk_vars.accept[i,j] = rho_step.accept
-                bulk_vars.ratio[i,j] = rho_step.ratio
+                rho_step = metropolis_rho(prior_data,data,
+                rho,delta,sig2,j,stepsize.rho[j],nx,nloc)
+                
+                corr .= rho_step[2]
+                rho[j] = rho_step[1].new_value
+                sample_vals.rho[i,j] = rho[j]
+                sample_vals.accept[i,j] = rho_step[1].accept
+                sample_vals.ratio[i,j] = rho_step[1].ratio
             end
+
             #gibbs update for τ^2
-            step_vars.tau2 = gibbs_tau2(model,prior_data,data,step_vars)
-            bulk_vars.tau2[i] = step_vars.tau2
+            tau2 = gibbs_tau2(prior_data,data,eta,delta,lik_power,nrep)
+            sample_vals.tau2[i] = tau2
             #gibbs update for σ^2
-            step_vars.sig2 = gibbs_sig2(prior_data,data,step_vars,nx,nloc)
-            bulk_vars.sig2[i] = step_vars.sig2
+            sig2 = gibbs_sig2(prior_data,delta,corr,nloc)
+            sample_vals.sig2[i] = sig2
             #gibbs update for δ
-            step_vars.delta = gibbs_delta(model,data,step_vars,nloc)
-            bulk_vars.delta[i,:] = step_vars.delta
+            delta = gibbs_delta(data,tau2,sig2,eta,corr,nloc,nrep)
+            sample_vals.delta[i,:] .= delta
         end
     end
     #return bulk_vars

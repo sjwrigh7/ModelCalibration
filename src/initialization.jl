@@ -29,7 +29,9 @@ function init_vars(data::DataStr,nmcmc::Int,
     accept = repeat([0.0],nmcmc,nx+ntheta)
     ratio = repeat([0.0],nmcmc,nx+ntheta)
 
-    return BulkVarsStruct(theta,tau2,sig2,delta,rho,accept,ratio)
+    return BulkVarsStruct(theta=theta,tau2=tau2,sig2=sig2,
+        delta=delta,eta=delta,rho=rho,accept=accept,
+        ratio=ratio)
 end
 
 """

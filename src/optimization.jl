@@ -198,7 +198,7 @@ Returns
 * `theta_mle::Vector{Float64}` MLE for θ.
 * `var_mle::Float64` MLE of the variance parameter for an identity-based covariance matrix.
 """
-function get_mle(data::DataStr,nx::Int,nloc::Int,ntheta::Int,model,epochs::Int=7000)
+function get_mle(data::DataStr,nx::Int,nloc::Int,ntheta::Int;epochs::Int=7000,model=model)
     theta_mle = max_lik_theta(ntheta,model,data,epochs)
     opt_response = predict_y_all(theta_mle,model)
     var_mle = max_lik_sigma(opt_response,data,epochs)^2

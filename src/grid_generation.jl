@@ -20,8 +20,9 @@ Returns
 ---
 Details
 """
-function find_lik_asymptote(data::DataStr,theta::Vector{Float64},covar::Array{Float64},delta::Float64)
-    response_mle = predict_y_all(theta)
+function find_lik_asymptote(data::DataStr,theta::Vector{Float64},
+    covar::Array{Float64},delta::Float64,model)
+    response_mle = predict_y_all(theta,model)
     max_lik = prod(pdf(MvNormal(response_mle,covar),data.exp.y))[1]
     upper_bounds = Vector{Float64}(undef,length(theta))
     lower_bounds = similar(upper_bounds)
@@ -34,7 +35,7 @@ function find_lik_asymptote(data::DataStr,theta::Vector{Float64},covar::Array{Fl
         while((epsilon > 1e-10) | (new_lik > (0.5*max_lik)))
             old_lik = copy(new_lik)
             theta_delta[i] += delta
-            response = predict_y_all(theta_delta)
+            response = predict_y_all(theta_delta,model)
             new_lik = prod(pdf(MvNormal(response,covar),data.exp.y))[1]
             epsilon = abs(new_lik - old_pdf)
             upper_bounds[i] = theta_delta[i]
@@ -46,7 +47,7 @@ function find_lik_asymptote(data::DataStr,theta::Vector{Float64},covar::Array{Fl
         while((epsilon > 1e-10) | new_lik > (0.5*max_lik))
             old_lik = copy(new_lik)
             theta_delta[i] -= delta
-            response = predict_y_all(theta_delta)
+            response = predict_y_all(theta_delta,model)
             new_lik = prod(pdf(MvNormal(response,covar),data.exp.y))[1]
             lower_bounds[i] = theta_delta[i]
         end
@@ -77,8 +78,8 @@ function format_doe(doe::Array{Float64},data::DataStr,nobs::Int,nx::Int,ntheta::
     for i in 1:num_design
         start = (i-1)*nobs + 1
         stop = i*nobs
-        full_doe[start:stop,1:nx] = data.exp.x
-        full_doe[start:stop,(nx+1):(nx+ntheta)] = repeat(doe[i,:]',nobs,1)
+        full_doe[start:stop,1:nx] .= data.exp.x
+        full_doe[start:stop,(nx+1):(nx+ntheta)] .= repeat(doe[i,:]',nobs,1)
     end
     return full_doe
 end
@@ -100,9 +101,9 @@ Returns
 function get_full_fact(n::Int,ntheta::Int,bounds::Tuple{Vector{Float64}})
     fact_vals = Array{Float64}(undef,n,ntheta)
     for theta in 1:ntheta
-        fact_vals[:,theta,dim] = collect(range(bounds[2][theta],bounds[1][theta],length=n))
+        fact_vals[:,theta,dim] .= collect(range(bounds[2][theta],bounds[1][theta],length=n))
     end
-    doe = Array{Float64}(undef,n^dim,dim)
+    doe = Array{Float64}(undef,n^ntheta,ntheta)
     for j in axes(doe)[2]
         reps = repeat(fact_vals[:,j],inner=n^(j-1),outer=n^(size(doe)[2]-(j)))
         doe[:,j] .= reps
@@ -134,9 +135,10 @@ After the MLE are solved, the approximate asymtptotes of the likelihood function
 During this step, the θ values closest to the θ MLEs that generate asymptotic likelihood values are calculated.
 With these bounds for θ solved, a full factorial, uniform grid DOE is generated over the bounds of θ.
 """
-function generate_sample_grid(n::Int,data::DataStr,nx::Int,ntheta::Int,delta::Float64=1e-3,model=model)
-    theta_mle,covar_mle = get_mle(data,nx,ntheta)
-    bounds = find_lik_asymptote(data,theta_mle,covar_mle,delta)
+function generate_sample_grid(n::Int,data::DataStr,nx::Int,ntheta::Int;
+    delta::Float64=1e-3,epochs::Int=7000,model=model)
+    theta_mle,covar_mle = get_mle(data,nx,nloc,ntheta;epochs=epochs,model=model)
+    bounds = find_lik_asymptote(data,theta_mle,covar_mle,delta,model)
     doe = get_full_fact(n,ntheta,bounds)
     return doe
 end

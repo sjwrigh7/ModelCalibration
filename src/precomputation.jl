@@ -62,8 +62,8 @@ function preallocate(data::DataStr,grid::GridData)
     #sig_star2_step = (grid.sig_star2.bounds.max - grid.sig_star2.bounds.min)/(grid.sig_star2.density - 1)
     #sig_star2 = (:)(grid.sig_star2.bounds.min,sig_star2_step,grid.sig_star2.bounds.max)
 
-    for j in 1:length(sig_star2)
-        for i in 1:size(rho)[1]
+    for j in eachindex(sig_star2)
+        for i in axes(rho)[1]
             sig_design[i,j,1] = rho[i]
             sig_design[i,j,2] = sig_star2[j]
         end
