@@ -100,6 +100,7 @@ function metropolis_theta(model,prior_data::PriorData,data::DataStr,
     eta = ifelse(accept,eta_prop,eta_current)
     theta[k] = new_value
     output = MetropolisInfo(new_value,ratio,accept)
+    #println(eta)
     return output,eta
 end
 
@@ -226,8 +227,8 @@ function metropolis_rho(prior_data::PriorData,data::DataStr,
     #println("accept = $accept")
     new_value = ifelse(accept,prop_rho,current_rho)  #determine acceptance
     corr = ifelse(accept,corr_prop,corr_current)
-    output = MetropolisInfo(new_value,ratio,accept),corr
-    return output
+    output = MetropolisInfo(new_value,ratio,accept)
+    return output,corr
 end
 
 """
@@ -328,7 +329,7 @@ m is the number of independent observations of the multivariate normal data.
 """
 function gibbs_delta(data::DataStr,tau2::Float64,sig2::Float64,
     eta::Vector{Float64},corr::Array{Float64,2},nloc::Int,nrep::Int)
-
+    println(eta)
     #calc covar matrix
     sig = sig2*corr
 
@@ -343,5 +344,6 @@ function gibbs_delta(data::DataStr,tau2::Float64,sig2::Float64,
     end
     bn = nrep*1/tau2*mean(bn_vec,dims=2)
     sample = rand(MvNormal(vec(covar*bn),covar))
+    println(eta)
     return sample  #sample from posterior
 end

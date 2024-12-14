@@ -99,7 +99,7 @@ function remove_burn(samples::BulkVarsStruct,nburn::Int)
     tau2 = samples.tau2[retained]
     sig2 = samples.sig2[retained]
     delta = samples.delta[retained,:]
-    eta = samples.eta[retained]
+    eta = samples.eta[retained,:]
     accept = samples.accept[retained,:]
     ratio = samples.ratio[retained,:]
 
@@ -397,14 +397,15 @@ Returns
 """
 function plot_credible_bounds(data::Array{Float64},x_coords::Array{Float64},scales::ScalePar)
     x_coords = round.(unnormalize_var(x_coords,scales),digits=4)
+    println(size(data))
     ticks = Vector{String}(undef,size(x_coords)[1])
     for i in axes(x_coords)[1]
         temp = [LaTeXString("\$x_{$j}=$(x_coords[i,j])\$") for j in axes(x_coords)[2]]
         ticks[i] = join(temp,";\n")
     end
-    p = StatsPlots.errorline(data',errorstyle=:plume,label=false,secondarylinealpha=0.2,
+    p = StatsPlots.errorline(permutedims(data),errorstyle=:plume,label=false,secondarylinealpha=0.2,
         right_margin=4mm)
-    StatsPlots.errorline!(data',errorstyle=:ribbon,errortype=:percentile,
+    StatsPlots.errorline!(permutedims(data),errorstyle=:ribbon,errortype=:percentile,
         percentiles=[2.5,97.5],label=false,secondarylinealpha=0.2,right_margin=4mm)
     #xticks!(axes(x_coords)[1],ticks)
     xlabel!("Control Variable Indices")
@@ -456,7 +457,8 @@ function plot_prediction!(model,thetas::Array{Float64},samples::BulkVarsStruct,d
     exp_resp = unnormalize_var(data.exp.y,scales.y)
 
     response = samples.eta
-
+    println(size(response))
+    println(typeof(response))
     p = plot_credible_bounds(response,data.exp.x,scales.x)
     if size(exp_resp)[2] > 1
         Plots.scatter!(exp_resp,color=8,label=false)
@@ -482,10 +484,10 @@ function plot_prediction!(model,thetas::Array{Float64},samples::BulkVarsStruct,d
     save_plots ? Plots.savefig(p,"$(mdl_apnd)_calibrated_discrepancy_model.png") : nothing
     show_plots ? Plots.display(p) : nothing
 
-    mean_eta = mean(response)
+    mean_eta = mean(response,dims=1)
     eta_bounds = Array{Float64}(undef,2,size(response)[2])
     delta_bounds = similar(eta_bounds)
-    tau_bound = quantile(samples.tau2,[0.975])
+    tau_bound = quantile(samples.tau2,[0.975])[1]
     epsilon_bounds = quantile(Normal(0,tau_bound),[0.025,0.975])
     for i in axes(response)[2]
         eta_bounds[:,i] = quantile(response[:,i],[0.025,0.975])
@@ -690,12 +692,13 @@ Optional arguments
 function post_process(samples::BulkVarsStruct,model,data::DataStr,nx::Int,ntheta::Int,
     nburn::Int,scales::Scaling;make_plots::Bool=true,save_plots::Bool=true,
     show_plots::Bool=true,nthin::Int=20,nbins::Int=30,mdl_apnd::String="")
-
+    println(size(samples.eta))
     samples = remove_burn(samples,nburn)
+    println(size(samples.eta))
     samples = thin_samples(samples,nthin)
-
+    println(size(samples.eta))
     scaled_samples = normalize_samples(samples,scales)
-
+    println(size(samples.eta))
     sqrt_variance!(scaled_samples)
 
     if make_plots

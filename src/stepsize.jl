@@ -54,7 +54,7 @@ Keyword arguments
 """
 function update_stepsize!(acceptance::Vector{Float64},stepsize::StepSize,
     history::Array{Float64},nx::Int,ntheta::Int,target::Vector{Float64},
-    scale::Float64,shape::Float64,offset::Float64)
+    scale::Float64,shape::Float64,offset::Float64,weight::Float64)
 
     @inbounds for i in 1:ntheta
         rate = acceptance[i+nx]
@@ -62,25 +62,51 @@ function update_stepsize!(acceptance::Vector{Float64},stepsize::StepSize,
         diff = rate - target[1]
 
         adjustment = stepsize_adjust(diff,scale,shape,offset)
-        stepsize.theta[i] = mean(vcat(history[:,i+nx],[stepsize.theta[i]*adjustment]))
+        stepsize.theta[i] = weighted_avg(history[1:(end-1),i+nx],
+            history[end,i+nx],weight)
+        stepsize.theta[i] = weighted_avg(repeat([stepsize.theta[i]],
+        size(history)[1]),stepsize.theta[i]*adjustment,weight)
+        #println("theta diff = $diff")
+        #println("theta adjustment = $adjustment")
     end
 
     @inbounds for i in 1:nx
         rate = acceptance[i]
-        #println("rate = $rate")
 
         diff = rate - target[2]
-        
+        #println("rho $i old stepsize = $(stepsize.rho[i])")
         adjustment = stepsize_adjust(diff,scale,shape,offset)
-        #println("old = $(stepsize.rho[i])")
-        stepsize.rho[i] = mean(vcat(history[:,i],[stepsize.rho[i]*adjustment]))
-        #println("addition = $(stepsize.rho[i]*adjustment)")
-        #println("new = $(stepsize.rho[i])")
+        stepsize.rho[i] = weighted_avg(history[1:(end-1),i],
+            history[end,i],weight)
+        stepsize.rho[i] = weighted_avg(repeat([stepsize.rho[i]],
+        size(history)[1]),stepsize.rho[i]*adjustment,weight)
+        
+        #println("rho $i acceptance = $rate")
+        #println("rho $i difference = $diff")
+        #println("rho $i adjustment = $adjustment")
+        #println("rho $i proposed stepsize = $(stepsize.rho[i])")
     end
 
     return stepsize
 end
 
+"""
+"""
+function weighted_avg(values::Vector{Float64},new::Float64,weight::Float64)
+    n = sum(values) + weight*new
+    d = length(values) + weight
+    avg = n/d
+    return avg
+end
+
+"""
+"""
+function weighted_avg(values::Vector{Bool},new::Vector{Bool},weight::Float64)
+    n = sum(values) + weight*sum(new)
+    d = length(values) + weight*length(new)
+    avg = n/d
+    return avg
+end
 """
     auto_stepsize(data::DataStr,nruns::Int,prior_data::PriorData,nsize::Int,nx::Int,ntheta::Int,nobs::Int,theta_init::Vector{Float64})
     auto_stepsize(data::DataStr,nruns::Int,prior_data::PriorData,nsize::Int,nx::Int,ntheta::Int,nobs::Int,theta_init::Vector{Float64},init::Float64,target::Tuple{Float64},eta::Float64,factor::Float64,offset::Float64)
@@ -137,6 +163,7 @@ function auto_stepsize(model,data::DataStr,nbatch::Int,batchsize::Int,prior_data
         #println(i)
         #println(i==1)
         #println(ifelse(i==1,1,0))
+        weight = sqrt(i)
         start = (i-1)*batchsize + 1 + ifelse(i==1,1,0)
         stop = i*batchsize
 
@@ -144,18 +171,22 @@ function auto_stepsize(model,data::DataStr,nbatch::Int,batchsize::Int,prior_data
             stepsize,nx,ntheta,nloc)
         
         @inbounds for j in 1:nx
+            #println("rho $j actual acceptance = $(mean(mcmc_vars.accept[start:stop,j]))")
             stepsize_hist[i,j] = stepsize.rho[j]
             #println("rate_2 = $(mean(mcmc_vars.accept[start:stop,j]))")
-            acceptance_hist[i,j] = mean(mcmc_vars.accept[start:stop,j])
+            acceptance_hist[i,j] = weighted_avg(mcmc_vars.accept[1:(start-1),
+            j],mcmc_vars.accept[start:stop,j],weight)
         end
 
         @inbounds for j in 1:ntheta
             stepsize_hist[i,j+nx] = stepsize.theta[j]
-            acceptance_hist[i,j+nx] = mean(mcmc_vars.accept[start:stop,j+nx])
+            acceptance_hist[i,j+nx] = weighted_avg(mcmc_vars.accept[1:(start-1),
+            j+nx],mcmc_vars.accept[start:stop,j+nx],weight)
         end
 
         stepsize = update_stepsize!(acceptance_hist[i,:],stepsize,
-            stepsize_hist[1:i,:],nx,ntheta,target,scale,shape,offset)
+            stepsize_hist[1:i,:],nx,ntheta,target,scale,shape,offset,
+            weight)
     end
     return stepsize,stepsize_hist,acceptance_hist
 end
@@ -195,9 +226,9 @@ After each batch, the algorithm calculates the acceptance rate of that batch.
 The gradient of a SSE objective function (as a function of the batch acceptance rate compared to the target) is calculated as a function of the log step size of θ and ρ.
 The the log step size for each θ and ρ is updated by subtracting the gradient multiplied by `eta`.
 """
-function stepsize_gd(data::DataStr,nbatch::Int,batchsize::Int,nx::Int,
-    ntheta::Int,nobs::Int,theta_init::Vector{Float64},init::Float64=1e-3,
-    target::Tuple{Float64}=Tuple([0.3,0.3]),eta::Float64 = 0.1)
+function stepsize_gd(model,data::DataStr,nbatch::Int,batchsize::Int,prior_data::PriorData,
+    nx::Int,ntheta::Int,nobs::Int,theta_init::Vector{Float64},init::Float64,
+    target::Vector{Float64},eta::Float64)
     
     stepsize = StepSize(repeat([log(init)],ntheta),repeat([log(init)],nx))
     
@@ -207,11 +238,11 @@ function stepsize_gd(data::DataStr,nbatch::Int,batchsize::Int,nx::Int,
     stepsize_hist = Array{Float64}(undef,nbatch,nx+ntheta)
     acceptance_hist = Array{Bool}(undef,nbatch,nx+ntheta)
 
-    function acceptance_objfn(vars::Vector{Float64})
-        stepsize.rho = exp.(vars[1:nx])
-        stepsize.theta = exp.(vars[(nx+1):(ntheta+nx)])
+    function acceptance_objfn(vars::Vector{Float64},model,start::Int,stop::Int)
+        stepsize.rho[:] .= exp.(vars[1:nx])
+        stepsize.theta[:] .= exp.(vars[(nx+1):(ntheta+nx)])
 
-        mcmc!(data,nsize,prior_data,mcmc_vars,start,stop,
+        mcmc!(model,data,prior_data,mcmc_vars,start,stop,
         stepsize,nx,ntheta,nobs)
         
         acceptance = mean(bulk_vars.accept[start:stop,:],dims=1)
@@ -220,11 +251,11 @@ function stepsize_gd(data::DataStr,nbatch::Int,batchsize::Int,nx::Int,
     end
 
     @inbounds @showprogress 1 "Computing Stepsize..." for i in 1:nbatch
-        start = (i-1)*nsize + 1 + ifelse(i==1,1,0)
-        stop = i*nsize
+        start = (i-1)*batchsize + 1 + ifelse(i==1,1,0)
+        stop = i*batchsize
 
-        points = hcat(stepsize.rho,stepsize.theta)
-        grad = gradient(x -> acceptance_objfn(x),points)
+        points = vcat(stepsize.rho,stepsize.theta)
+        grad = gradient(x -> acceptance_objfn(x,model,start,stop),points)
 
         points -= eta .* grad
 
@@ -407,16 +438,21 @@ Returns
 * `stepsize::StepSize` Struct containing the calculated stepsizes that will result in the target acceptance rate.
 """
 function find_stepsize(model,data::DataStr,nbatch::Int,batchsize::Int,prior_data::PriorData,
-    nx::Int,ntheta::Int,nloc::Int,theta_init::Vector{Float64},method::Int,make_plots::Bool,
-    show_plots::Bool,save_plots::Bool,init::Float64=1e-3,target::Vector{Float64}=[0.3,0.3],
-    scale::Float64 = 2.0,shape::Float64=30.0,offset::Float64=1.5;mdl_apnd::String="")
+    nx::Int,ntheta::Int,nloc::Int;theta_init::Union{Vector{Float64},Float64}=0.5,
+    method::Int=1,make_plots::Bool=true,show_plots::Bool=true,save_plots::Bool=true,
+    init::Float64=1e-3,target::Vector{Float64}=[0.3,0.3],eta::Float64=0.3,
+    scale::Float64 = 2.0,shape::Float64=10.0,offset::Float64=1.5,mdl_apnd::String="")
+
+    if typeof(theta_init) == Float64
+        theta_init = repeat([theta_init],ntheta)
+    end
 
     if method == 1
         stepsize,stepsize_hist,acceptance_hist = auto_stepsize(model,data,nbatch,batchsize,prior_data,nx,
         ntheta,nloc,theta_init,init,target,scale,shape,offset)
     elseif method == 2
-        stepsize,stepsize_hist,acceptance_hist = stepsize_gd(data,nbatch,batchsize,nx,ntheta,nobs,
-        theta_init,init,target,eta)
+        stepsize,stepsize_hist,acceptance_hist = stepsize_gd(model,data,nbatch,batchsize,prior_data,nx,
+        ntheta,nloc,theta_init,init,target,eta)
     end
 
     make_plots ? plot_stepsize_opt(stepsize_hist,acceptance_hist,nx,ntheta,show_plots,save_plots,mdl_apnd) : nothing
