@@ -83,7 +83,9 @@ function metropolis_theta(model,prior_data::PriorData,data::DataStr,
     theta[k] = prop_theta     #replace theta at index k with prop val
     eta_prop = predict_y_all(theta,model)
     log_lik_prop = loglik(data,delta,tau2,eta_prop,nloc)[1] #calc likelihood
-
+    #println(eta)
+    #println(eta_current[1])
+    #println(eta_prop[1])
     #calculate jump distribution values
     log_jump_current = logpdf(Normal(current_gamma,stepsize),prop_gamma)+
     log(abs(-(c1)/((prop_theta+c2)*(-c1+prop_theta+c2))))
@@ -100,7 +102,7 @@ function metropolis_theta(model,prior_data::PriorData,data::DataStr,
     eta = ifelse(accept,eta_prop,eta_current)
     theta[k] = new_value
     output = MetropolisInfo(new_value,ratio,accept)
-    #println(eta)
+    #println(eta[1])
     return output,eta
 end
 
@@ -288,7 +290,8 @@ p(τ^2|.) ∼ IG(α+n*m/2,β+0.5*λ'*λ)
 Where n is the length of the multivariate normal distribution in the data model, m is the number of independent observations from this data model, and λ is the vector y_i - η - δ.
 """
 function gibbs_tau2(prior_data::PriorData,data::DataStr,
-    eta::Vector{Float64},delta::Vector{Float64},lik_power::Int,nrep::Int)      
+    eta::Vector{Float64},delta::Vector{Float64},
+    lik_power::Int,nrep::Int)      
 
     par1 = prior_data.tau2.par1 + 0.5*lik_power  #calcualte posterior params
 
@@ -329,7 +332,7 @@ m is the number of independent observations of the multivariate normal data.
 """
 function gibbs_delta(data::DataStr,tau2::Float64,sig2::Float64,
     eta::Vector{Float64},corr::Array{Float64,2},nloc::Int,nrep::Int)
-    println(eta)
+
     #calc covar matrix
     sig = sig2*corr
 
@@ -344,6 +347,6 @@ function gibbs_delta(data::DataStr,tau2::Float64,sig2::Float64,
     end
     bn = nrep*1/tau2*mean(bn_vec,dims=2)
     sample = rand(MvNormal(vec(covar*bn),covar))
-    println(eta)
+
     return sample  #sample from posterior
 end
