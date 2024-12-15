@@ -153,15 +153,6 @@ function mcmc!(model,data::DataStr,prior_data::PriorData,
             #gibbs update for τ^2
             tau2 = gibbs_tau2(prior_data,data,eta,delta,lik_power,nrep)
             sample_vals.tau2[i] = tau2
-            #gibbs update for σ^2
-            sig2 = gibbs_sig2(prior_data,delta,corr,nloc)
-            sample_vals.sig2[i] = sig2
-            #gibbs update for δ
-            delta = gibbs_delta(data,tau2,sig2,eta,corr,nloc,nrep)
-            sample_vals.delta[i,:] .= delta
-            #gibbs update for τ^2
-            tau2 = gibbs_tau2(prior_data,data,eta,delta,lik_power,nrep)
-            sample_vals.tau2[i] = tau2
 
             #gibbs update for σ^2
             sig2 = gibbs_sig2(prior_data,delta,corr,nloc)
@@ -170,7 +161,6 @@ function mcmc!(model,data::DataStr,prior_data::PriorData,
             #gibbs update for δ
             delta = gibbs_delta(data,tau2,sig2,eta,corr,nloc,nrep)
             sample_vals.delta[i,:] .= delta
->>>>>>> server/main
         end
     end
     #return bulk_vars
