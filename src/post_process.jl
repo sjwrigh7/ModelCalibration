@@ -403,7 +403,7 @@ function plot_credible_bounds(data::Array{Float64},x_coords::Array{Float64},scal
         temp = [LaTeXString("\$x_{$j}=$(x_coords[i,j])\$") for j in axes(x_coords)[2]]
         ticks[i] = join(temp,";\n")
     end
-    p = StatsPlots.errorline(permutedims(data),errorstyle=:plume,label=false,secondarylinealpha=0.2,
+    p = StatsPlots.errorline(permutedims(data),errorstyle=:plume,label="Evaluations",secondarylinealpha=0.2,
         right_margin=4mm)
     StatsPlots.errorline!(permutedims(data),errorstyle=:ribbon,errortype=:percentile,
         percentiles=[2.5,97.5],label=false,secondarylinealpha=0.2,right_margin=4mm)
@@ -460,11 +460,8 @@ function plot_prediction!(model,thetas::Array{Float64},samples::BulkVarsStruct,d
     println(size(response))
     println(typeof(response))
     p = plot_credible_bounds(response,data.exp.x,scales.x)
-    if size(exp_resp)[2] > 1
-        Plots.scatter!(exp_resp,color=8,label=false)
-    else
-        Plots.scatter!(exp_resp,color=8,label=false)
-    end
+    #p.series_list[end].plotattributes[:label] = "Evaluations"
+    Plots.scatter!(exp_resp,color=8,label="Experiments")
     title!("Surrogate Model Prediction")
     ylabel!(LaTeXString("\$\\eta (\\mathbf{x})\$"))
 
@@ -473,18 +470,14 @@ function plot_prediction!(model,thetas::Array{Float64},samples::BulkVarsStruct,d
 
     
     p = plot_credible_bounds(response .+ samples.delta,data.exp.x,scales.x)
-    if size(exp_resp)[2] > 1
-        Plots.scatter!(exp_resp,color=8,label=false)
-    else
-        Plots.scatter!(exp_resp,color=8,label=false)
-    end
+    Plots.scatter!(exp_resp,color=8,label="Experiments")
     title!("Data Model Samples")
     ylabel!(LaTeXString("\$\\eta (\\mathbf{x})+\\delta (\\mathbf{x})\$"))
 
     save_plots ? Plots.savefig(p,"$(mdl_apnd)_calibrated_discrepancy_model.png") : nothing
     show_plots ? Plots.display(p) : nothing
 
-    mean_eta = mean(response,dims=1)
+    mean_eta = vec(mean(response,dims=1))
     eta_bounds = Array{Float64}(undef,2,size(response)[2])
     delta_bounds = similar(eta_bounds)
     tau_bound = quantile(samples.tau2,[0.975])[1]
@@ -495,10 +488,15 @@ function plot_prediction!(model,thetas::Array{Float64},samples::BulkVarsStruct,d
     end
     lb = eta_bounds[1,:] .+ delta_bounds[1,:] .+ epsilon_bounds[1]
     ub = eta_bounds[2,:] .+ delta_bounds[2,:] .+ epsilon_bounds[2]
+    lb = vec(lb)
+    ub = vec(ub)
     p = Plots.plot(mean_eta,label="Mean Surrogate Response")
-    Plots.plot!(exp_resp,label="Experimental Data")
-    Plots.plot!(lb,fillrange=ub,label="Uncertainty Bounds")
-    Plots.plot(ub,label=false)
+    Plots.scatter!(exp_resp,label="Experimental Data")
+    Plots.plot!(lb,fillrange=ub,label="Uncertainty Bounds",alpha=0.3,lw=1)
+    Plots.plot!(hcat(lb,ub),label=false,lw=1,color=3)
+    title!("Estimated Uncertainty Bounds")
+    xlabel!("Control Variable Indices")
+    ylabel!(LaTeXString("\$y(\\mathbf{x})\$"))
     
     save_plots ? Plots.savefig(p,"$(mdl_apnd)_uncertainty.png") : nothing
     show_plots ? Plots.display(p) : nothing

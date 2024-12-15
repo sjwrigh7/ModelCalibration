@@ -32,23 +32,24 @@ function find_lik_asymptote(data::DataStr,theta::Vector{Float64},
         
         new_lik = copy(max_lik)
         theta_delta = copy(theta)
-        while((epsilon > 1e-10) | (new_lik > (0.5*max_lik)))
+        while((epsilon > 1e-10) || (new_lik > (0.5*max_lik)))
             old_lik = copy(new_lik)
             theta_delta[i] += delta
             response = predict_y_all(theta_delta,model)
             new_lik = prod(pdf(MvNormal(response,covar),data.exp.y))[1]
-            epsilon = abs(new_lik - old_pdf)
+            epsilon = abs(new_lik - old_lik)
             upper_bounds[i] = theta_delta[i]
         end
 
         epsilon = 10
         new_lik = copy(max_lik)
         theta_delta = copy(theta)
-        while((epsilon > 1e-10) | new_lik > (0.5*max_lik))
+        while((epsilon > 1e-10) || new_lik > (0.5*max_lik))
             old_lik = copy(new_lik)
             theta_delta[i] -= delta
             response = predict_y_all(theta_delta,model)
-            new_lik = prod(pdf(MvNormal(response,covar),data.exp.y))[1]
+            new_lik = sum(pdf(MvNormal(response,covar),data.exp.y))[1]
+            epsilon = abs(new_lik - old_lik)
             lower_bounds[i] = theta_delta[i]
         end
     end
@@ -98,10 +99,12 @@ Keyword arguments
 Returns
 * `doe::Array{Float64}` design of experiments.
 """
-function get_full_fact(n::Int,ntheta::Int,bounds::Tuple{Vector{Float64}})
+function get_full_fact(n::Int,ntheta::Int,
+        bounds::Tuple{Vector{Float64},Vector{Float64}})
+    
     fact_vals = Array{Float64}(undef,n,ntheta)
     for theta in 1:ntheta
-        fact_vals[:,theta,dim] .= collect(range(bounds[2][theta],bounds[1][theta],length=n))
+        fact_vals[:,theta] .= collect(range(bounds[2][theta],bounds[1][theta],length=n))
     end
     doe = Array{Float64}(undef,n^ntheta,ntheta)
     for j in axes(doe)[2]
@@ -137,8 +140,14 @@ With these bounds for θ solved, a full factorial, uniform grid DOE is generated
 """
 function generate_sample_grid(n::Int,data::DataStr,nx::Int,ntheta::Int;
     delta::Float64=1e-3,epochs::Int=7000,model=model)
+    nloc = size(data.exp.y)[1]
     theta_mle,covar_mle = get_mle(data,nx,nloc,ntheta;epochs=epochs,model=model)
     bounds = find_lik_asymptote(data,theta_mle,covar_mle,delta,model)
+    println(bounds)
     doe = get_full_fact(n,ntheta,bounds)
-    return doe
+    response = Array{Float64}(undef,size(doe)[1],nloc)
+    for i in axes(response)[1]
+        response[i,:] = predict_y_all(doe[i,:],model)
+    end
+    return doe,response
 end
