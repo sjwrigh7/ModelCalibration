@@ -139,7 +139,7 @@ function mcmc!(model,data::DataStr,prior_data::PriorData,
                 sample_vals.ratio[i,j+nx] = theta_step[1].ratio
             end
             sample_vals.eta[i,:] .= eta
-            println(sample_vals.eta[i,:])
+            #println(sample_vals.eta[i,:])
             #metropolis update for ρ
             @inbounds for j in 1:nx
                 rho_step = metropolis_rho(prior_data,data,
@@ -151,22 +151,22 @@ function mcmc!(model,data::DataStr,prior_data::PriorData,
                 sample_vals.accept[i,j] = rho_step[1].accept
                 sample_vals.ratio[i,j] = rho_step[1].ratio
             end
-            println(sample_vals.eta[i,:])
+            #println(sample_vals.eta[i,:])
             #gibbs update for τ^2
             tau2 = gibbs_tau2(prior_data,data,eta,delta,lik_power,nrep)
             sample_vals.tau2[i] = tau2
-            println(sample_vals.eta[i,:])
+            #println(sample_vals.eta[i,:])
             #gibbs update for σ^2
             sig2 = gibbs_sig2(prior_data,delta,corr,nloc)
             sample_vals.sig2[i] = sig2
-            println(sample_vals.eta[i,:])
+            #println(sample_vals.eta[i,:])
             #gibbs update for δ
             delta = gibbs_delta(data,tau2,sig2,eta,corr,nloc,nrep)
-            println(sample_vals.eta[i,:])
+            #println(sample_vals.eta[i,:])
             sample_vals.delta[i,:] .= delta
-            println(sample_vals.eta[i,:])
-            println(sample_vals.eta[i,:])
-            println(eta)
+            #println(sample_vals.eta[i,:])
+            #println(sample_vals.eta[i,:])
+            #println(eta)
         end
     end
     #return bulk_vars

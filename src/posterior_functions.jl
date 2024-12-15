@@ -329,7 +329,7 @@ m is the number of independent observations of the multivariate normal data.
 """
 function gibbs_delta(data::DataStr,tau2::Float64,sig2::Float64,
     eta::Vector{Float64},corr::Array{Float64,2},nloc::Int,nrep::Int)
-    println(eta)
+    #println(eta)
     #calc covar matrix
     sig = sig2*corr
 
@@ -344,6 +344,6 @@ function gibbs_delta(data::DataStr,tau2::Float64,sig2::Float64,
     end
     bn = nrep*1/tau2*mean(bn_vec,dims=2)
     sample = rand(MvNormal(vec(covar*bn),covar))
-    println(eta)
+    #println(eta)
     return sample  #sample from posterior
 end

@@ -45,8 +45,8 @@ This function calls the `BlackBoxOptim.jl` differential evolutionary optimizer o
 """
 function max_lik_theta(ntheta::Int,model,data,epochs::Int=7000)
     function theta_opt(theta::Vector{Float64})
-        response = predict_y_all(theta,Main.model)
-        sse = sum((response .- Main.data.exp.y).^2)
+        response = predict_y_all(theta,model)
+        sse = sum((response .- data.exp.y).^2)
         return sse
     end
     theta_vals = bboptimize(theta_opt; SearchRange = [(0.0,1.0) for i in 1:ntheta],NumDimensions=ntheta,MaxSteps=epochs)
