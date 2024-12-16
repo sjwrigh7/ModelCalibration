@@ -1,15 +1,15 @@
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
 ########################### Define Posterior Functions ############################
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
-"""
-    metropolis_update(proprosal::Function,posterior:Function,)
-"""
-function metropolis_update(proposal::Function,posterior::Function,var::Float64)
-    new_value = proposal(var)
-    current_posterior = posterior(var)
-    proposal_posterior = posterior(var)
-
-end
+#="""
+#    metropolis_update(proprosal::Function,posterior:Function,)
+#"""
+#function metropolis_update(proposal::Function,posterior::Function,var::Float64)
+#    new_value = proposal(var)
+#    current_posterior = posterior(var)
+#    proposal_posterior = posterior(var)
+#
+#end
 """
     @metropolis_sample param xarg
 Macro to generate generalized code for a single metropolis sample.
@@ -62,7 +62,7 @@ macro metropolis_sample(param,xarg=nothing)
         $(esc(ratio_store))
     end
 end
-
+=#
 """
     mcmc(data::DataStr,prior_data::PriorData,bulk_vars::BulkVarsStruct,start::Int,stop::Int,stepsize::StepSize,nx::Int,ntheta::Int,nobs::Int)
 Function to perform the Markov chain Monte Carlo simulation to draw from the posterior distributions of the parameters.
