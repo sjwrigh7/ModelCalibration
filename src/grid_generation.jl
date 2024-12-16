@@ -32,24 +32,27 @@ function find_lik_asymptote(data::DataStr,theta::Vector{Float64},
         
         new_lik = copy(max_lik)
         theta_delta = copy(theta)
-        while((epsilon > 1e-10) || (new_lik > (0.5*max_lik)))
+        while((epsilon > 1e-20) || (new_lik > (0.5*max_lik)))
             old_lik = copy(new_lik)
             theta_delta[i] += delta
             response = predict_y_all(theta_delta,model)
             new_lik = prod(pdf(MvNormal(response,covar),data.exp.y))[1]
-            epsilon = abs(new_lik - old_lik)
+            #println("lik = $new_lik")
+            epsilon = abs(new_lik - old_lik)/max_lik
+            #println("eps = $epsilon")
+            #println("theta = $theta_delta")
             upper_bounds[i] = theta_delta[i]
         end
 
         epsilon = 10
         new_lik = copy(max_lik)
         theta_delta = copy(theta)
-        while((epsilon > 1e-10) || new_lik > (0.5*max_lik))
+        while((epsilon > 1e-20) || new_lik > (0.5*max_lik))
             old_lik = copy(new_lik)
             theta_delta[i] -= delta
             response = predict_y_all(theta_delta,model)
             new_lik = sum(pdf(MvNormal(response,covar),data.exp.y))[1]
-            epsilon = abs(new_lik - old_lik)
+            epsilon = abs(new_lik - old_lik)/max_lik
             lower_bounds[i] = theta_delta[i]
         end
     end

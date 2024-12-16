@@ -16,7 +16,7 @@ Keyword arguments
 * `priors::PriorData` Struct containing prior distribution hyperparameters.
 """
 function griddy_gibbs!(data::DataStr,sample_vals::GriddyVarsStruct,c_sse::Array{Float64},
-    log_det_sig::Array{Float64},sig_design::Array{Float64},priors::PriorData)
+    log_det_sig::Array{Float64},sig_design::Array{Float64},priors::PriorData,nmcmc::Int)
     
     n_loc = size(data.exp.y)[1]
     n_rep = size(data.exp.y)[2]
@@ -49,11 +49,8 @@ function griddy_gibbs!(data::DataStr,sample_vals::GriddyVarsStruct,c_sse::Array{
         
         #presolve for the inverse of τ^2 so it only needs to be done once per iteration
         tau2_inv = 1/tau2
-        #println("τ^-1")
-        #println(tau2_inv)
 
         #calculate the log-likelihood of θ and store in pre-allocated arrays
-        #loglik_pass .= c_sse[:,rho,sig_star2]
         loglik_theta!(c_sse[:,rho,sig_star2],tau2_inv,loglik_theta)
         
         #calculate proportional posterior of θ
@@ -65,28 +62,16 @@ function griddy_gibbs!(data::DataStr,sample_vals::GriddyVarsStruct,c_sse::Array{
         
         #store θ index into results struct
         sample_vals.theta[i] = theta
-        
-        #println("θ")
-        #println(theta)
-        
-        #println("SSE")
-        #println(describe(c_sse[1,:,:]))
-        #println("τ")
-        #println(tau2)
+
         #calculate log-likelihood for the entire covariance matrix and store into pre-allocated arrays
         loglik_covar!(c_sse[theta,:,:],log_det_sig,tau2_inv,loglik_covar)
-        #println("Σ")
-        #println(describe(loglik_covar))
         
         #calculate proportional posterior of ρ
         #this calculation would go on this line a non-uniform prior is specified
 
         #sample ρ using full conditional with likelihood Array over ρ dimension
-        #println("ρ")
-        #println(describe(loglik_covar[:,sig_star2]))
         rho = griddy_sample!(loglik_covar[:,sig_star2],
         stable_rho,norm_rho,cumsum_rho)
-        #println(sig_design[rho,sig_star2,1])
         sample_vals.rho[i] = rho
 
         #calculate proportional posterior of σ*^2
@@ -94,12 +79,8 @@ function griddy_gibbs!(data::DataStr,sample_vals::GriddyVarsStruct,c_sse::Array{
             priors.sig2.par1,priors.sig2.par2),sig_design[rho,sig_star2,2])
 
         #sample σ*^2 using full conditional with likelihood Array over σ*^2 dimension
-        #println("σ*")
-        #println(describe(sig_post))
         sig_star2 = griddy_sample!(sig_post,stable_sig,norm_sig,cumsum_sig)
-        #println(sig_star2)
         sample_vals.sig_star2[i] = sig_star2
-        #println(sig_design[rho,sig_star2,2])
 
         #sample τ^2 using semi-conjugate posterior distributions
         tau2 = rand(InverseGamma(priors.tau2.par1+n_loc*n_rep/2,

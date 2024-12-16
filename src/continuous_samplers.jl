@@ -139,6 +139,7 @@ function mcmc!(model,data::DataStr,prior_data::PriorData,
                 sample_vals.ratio[i,j+nx] = theta_step[1].ratio
             end
             sample_vals.eta[i,:] .= eta
+
             #metropolis update for ρ
             @inbounds for j in 1:nx
                 rho_step = metropolis_rho(prior_data,data,

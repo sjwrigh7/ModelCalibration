@@ -39,26 +39,26 @@ Returns
 * `rho::Array{Float64}` An initialized Array to store the values of ρ for precomputation.
 * `sig_star2::Vector{Float64}` An initialized Vector to store the values of σ*^2 for precomputation.
 """
-function preallocate(data::DataStr,grid::GridData)
-    nsim = size(unique(data.sim.theta,dims=1))[1]
+function preallocate(theta_grid::Array{Float64},sig_grid::GridData)
+    nsim = size(unique(theta_grid,dims=1))[1]
 
-    rho = Vector{Float64}(undef,grid.rho.density)
-    sig_star2 = Vector{Float64}(undef,grid.sig_star2.density)
+    rho = Vector{Float64}(undef,sig_grid.rho.density)
+    sig_star2 = Vector{Float64}(undef,sig_grid.sig_star2.density)
 
-    sig_det = Array{Float64}(undef,grid.rho.density,grid.sig_star2.density)
-    sig_design = Array{Float64}(undef,grid.rho.density,grid.sig_star2.density,2)
+    sig_det = Array{Float64}(undef,sig_grid.rho.density,sig_grid.sig_star2.density)
+    sig_design = Array{Float64}(undef,sig_grid.rho.density,sig_grid.sig_star2.density,2)
 
-    c_sse = Array{Float64}(undef,nsim,grid.rho.density,grid.sig_star2.density)
+    c_sse = Array{Float64}(undef,nsim,sig_grid.rho.density,sig_grid.sig_star2.density)
 
-    rho_step = (grid.rho.bounds.max - grid.rho.bounds.min)/(grid.rho.density-1)
-    rho = (:)(grid.rho.bounds.min,rho_step,grid.rho.bounds.max)
+    rho_step = (sig_grid.rho.bounds.max - sig_grid.rho.bounds.min)/(sig_grid.rho.density-1)
+    rho = (:)(sig_grid.rho.bounds.min,rho_step,sig_grid.rho.bounds.max)
     
     #sig_star2_step = (log(grid.sig_star2.bounds.max) - log(grid.sig_star2.bounds.min))/
     #(grid.sig_star2.density-1)
     #sig_star2 = exp.((:)(log(grid.sig_star2.bounds.min),sig_star2_step,log(grid.sig_star2.bounds.max)))
-    sig_star2_step = (sqrt(grid.sig_star2.bounds.max) - sqrt(grid.sig_star2.bounds.min))/
-    (grid.sig_star2.density-1)
-    sig_star2 = ((:)(sqrt(grid.sig_star2.bounds.min),sig_star2_step,sqrt(grid.sig_star2.bounds.max))).^2
+    sig_star2_step = (sqrt(sig_grid.sig_star2.bounds.max) - sqrt(sig_grid.sig_star2.bounds.min))/
+    (sig_grid.sig_star2.density-1)
+    sig_star2 = ((:)(sqrt(sig_grid.sig_star2.bounds.min),sig_star2_step,sqrt(sig_grid.sig_star2.bounds.max))).^2
     #sig_star2_step = (grid.sig_star2.bounds.max - grid.sig_star2.bounds.min)/(grid.sig_star2.density - 1)
     #sig_star2 = (:)(grid.sig_star2.bounds.min,sig_star2_step,grid.sig_star2.bounds.max)
 
@@ -83,8 +83,9 @@ Keyword arguments
 * `sig_det::Vector{Float64}` Array to store the precomputed values for the determinant of the covariance matrix.
 * `sig_design::Array{Float64}` Array to containing the ρ and σ*^2 input values for computing Σ.
 """
-function precompute!(data::DataStr,c_sse::Array{Float64},
-    sig_det::Array{Float64},sig_design::Array{Float64},nx::Int)
+function precompute!(grid_response::Array{Float64,2},data::DataStr,c_sse::Array{Float64},
+        sig_det::Array{Float64},sig_design::Array{Float64},nx::Int)
+
     nloc = size(data.exp.x)[1]
     sigma = Array{Float64}(undef,nloc,nloc)
     sig_inv = similar(sigma)
@@ -99,8 +100,8 @@ function precompute!(data::DataStr,c_sse::Array{Float64},
             sigma .= ident .+ sig_design[i,j,2]*correlation_construct(rho_vec,data.exp.x,nx,nloc)
             sig_det[i,j] = log(det(sigma)^(-nobs/2))
             sig_inv .= inv(sigma)
-            for k in 1:size(data.sim.y)[2]
-                c_sse[k,i,j] = scaled_sse(data.sim.y[:,k],sig_inv,y_bar,nobs)
+            for k in 1:size(grid_response)[1]
+                c_sse[k,i,j] = scaled_sse(grid_response[k,:],sig_inv,y_bar,nobs)
             end
         end
     end

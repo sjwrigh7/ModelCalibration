@@ -57,8 +57,8 @@ function normalize_samples(samples::GriddyVarsStruct,scales::Scaling,theta_grid:
 
     theta = rev ? unnormalize_var(theta_grid[samples.theta],scales.theta) :
         normalize_var(design[samples.theta],scales.theta)
-    tau2 = rev ? unnormalize_var(samples.tau2,scales.y) :
-        normalize_var(samples.tau2,scales.y)
+    tau2 = rev ? (unnormalize_var(sqrt.(samples.tau2),scales.y) .- scales.y.min).^2 :
+    (normlize_var(sqrt.(samples.tau2 .+ scales.y.min),scales.y)).^2
     rho = sig_grid[samples.rho,1,1]
     sig_star2 = sig_grid[1,samples.sig_star2,2] .* tau2
 
@@ -135,12 +135,37 @@ function remove_burn(samples::GriddyPosteriors,nburn::Int)
         Specified burn = $nburn")
     end
     keep = nburn + 1
+    retained = keep:length(samples.tau2)
     theta = samples.theta[retained,:]
     tau2 = samples.tau2[retained]
     sig_star2 = samples.sig_star2[retained]
     rho = samples.rho[retained]
 
-    truncated = GriddyPosteriors(theta=theta,tau2=tau2,sig_star2,rho=rho)
+    truncated = GriddyPosteriors(theta=theta,tau2=tau2,sig_star2=sig_star2,
+        rho=rho)
+
+    return truncated
+end
+
+"""
+
+"""
+function remove_burn(samples::GriddyVarsStruct,nburn::Int)
+    if nburn >= length(samples.tau2)
+        error("The number of specified to burn is greater than or equal to the total number of samples.
+        Please specify a number of samples to burn that is less than the total number of samples.
+        Total number of samples = $(length(samples.tau2))
+        Specified burn = $nburn")
+    end
+    keep = nburn + 1
+    retained = keep:length(samples.tau2)
+    theta = samples.theta[retained]
+    tau2 = samples.tau2[retained]
+    sig_star2 = samples.sig_star2[retained]
+    rho = samples.rho[retained]
+
+    truncated = GriddyVarsStruct(theta=theta,tau2=tau2,sig_star2=sig_star2,
+        rho=rho)
 
     return truncated
 end
@@ -236,6 +261,51 @@ function thin_samples(samples::GriddyPosteriors,nthin::Int)
     sig_star2 = samples.sig_star2[retained]
     
     thinned = GriddyPosteriors(theta=theta,rho=rho,tau2=tau2,sig_star2=sig_star2)
+    
+    return thinned
+end
+
+"""
+    thin_samples(samples::GriddyPosteriors,nthin::Int)
+Function to thin the posterior samples, helping remove autocorrelated values from the samples.
+This implementation is for the continuous sampler.
+
+---
+Keyword arguments
+* `samples::GriddyPosteriors` Struct storing the posterior samples.
+* `nthin::Int` The number of samples to skip.
+
+---
+Returns
+* `thinned::GriddyPosteriors` Struct containing the thinned posterior samples.
+
+---
+Details
+This function selects retains every `nthin`th sample from the posterior samples, starting at the first index and going through to the end.
+"""
+function thin_samples(samples::GriddyVarsStruct,nthin::Int)
+    if nthin >= length(samples.tau2)
+        error("The number of specified to burn is greater than or equal to the total number of samples.
+        Please specify a number of samples to burn that is less than the total number of samples.
+        Total number of samples = $(length(samples.tau2))
+        Specified thinning = $nthin")
+    end
+
+    retained = 1:nthin:length(samples.tau2)
+    if length(retained) < 100
+        @warn "The specified thinning rate, $nthin, seems large for the number of posterior samples.
+        Total number of samples =  $(length(samples.tau2))
+        Number of samples retained = $(length(retained))
+        Number of samples discarded = $(length(samples.tau2) - length(retained))
+        Consider using a smaller thinning rate or drawing more posterior samples."
+    end
+
+    theta = samples.theta[retained]
+    rho = samples.rho[retained]
+    tau2 = samples.tau2[retained]
+    sig_star2 = samples.sig_star2[retained]
+    
+    thinned = GriddyVarsStruct(theta=theta,rho=rho,tau2=tau2,sig_star2=sig_star2)
     
     return thinned
 end
@@ -451,18 +521,17 @@ Function to plot the surrogate model and data model estimations.
 * `save_plots::Bool` Indicator of whether to save the plot that is generated.
 * `show_plots::Bool` Indicator of whether to display the plot that is generated.
 """
-function plot_prediction!(model,thetas::Array{Float64},samples::BulkVarsStruct,data::DataStr,
-    scales::Scaling,nx,save_plots::Bool,show_plots::Bool,mdl_apnd::String)
+function plot_prediction!(samples::BulkVarsStruct,data::DataStr,
+    scales::Scaling,save_plots::Bool,show_plots::Bool,mdl_apnd::String)
     
     exp_resp = unnormalize_var(data.exp.y,scales.y)
 
     response = samples.eta
-    println(size(response))
-    println(typeof(response))
+
     p = plot_credible_bounds(response,data.exp.x,scales.x)
-    #p.series_list[end].plotattributes[:label] = "Evaluations"
-    Plots.scatter!(exp_resp,color=8,label="Experiments")
-    title!("Surrogate Model Prediction")
+    Plots.scatter!(exp_resp[:,1],color=8,label="Experiments")
+    Plots.scatter!(exp_resp[:,2:end],color=8,label=false)
+    title!("Calibrated Surrogate Model")
     ylabel!(LaTeXString("\$\\eta (\\mathbf{x})\$"))
 
     save_plots ? Plots.savefig(p,"$(mdl_apnd)_calibrated_surrogate_model.png") : nothing
@@ -470,7 +539,8 @@ function plot_prediction!(model,thetas::Array{Float64},samples::BulkVarsStruct,d
 
     
     p = plot_credible_bounds(response .+ samples.delta,data.exp.x,scales.x)
-    Plots.scatter!(exp_resp,color=8,label="Experiments")
+    Plots.scatter!(exp_resp[:,1],color=8,label="Experiments")
+    Plots.scatter!(exp_resp[:,2:end],color=8,label=false)
     title!("Data Model Samples")
     ylabel!(LaTeXString("\$\\eta (\\mathbf{x})+\\delta (\\mathbf{x})\$"))
 
@@ -491,8 +561,9 @@ function plot_prediction!(model,thetas::Array{Float64},samples::BulkVarsStruct,d
     lb = vec(lb)
     ub = vec(ub)
     p = Plots.plot(mean_eta,label="Mean Surrogate Response")
-    Plots.scatter!(exp_resp,label="Experimental Data")
-    Plots.plot!(lb,fillrange=ub,label="Uncertainty Bounds",alpha=0.3,lw=1)
+    Plots.scatter!(exp_resp[:,1],color=8,label="Experiments")
+    Plots.scatter!(exp_resp[:,2:end],color=8,label=false)
+    Plots.plot!(lb,fillrange=ub,label="Uncertainty Bounds",alpha=0.2,lw=1)
     Plots.plot!(hcat(lb,ub),label=false,lw=1,color=3)
     title!("Estimated Uncertainty Bounds")
     xlabel!("Control Variable Indices")
@@ -510,11 +581,11 @@ function plot_prediction!(model,thetas::Array{Float64},samples::BulkVarsStruct,d
     end
 
     p = plot_credible_bounds(error,data.exp.x,scales.x)
-    title!("Calibrated Model Error Estimation")
-    ylabel!(LaTeXString("\$y(\\mathbf{x})-[\\eta(\\mathbf{x})+\\delta(\\mathbf{x})]\$"))
-    if size(exp_resp)[2] > 1
-        Plots.scatter!(exp_resp .- mean(exp_resp,dims=2),color=8,label=false)
-    end
+    title!("Data Model Mean Error Estimation")
+    ylabel!(LaTeXString("\$\\bar{y}(\\mathbf{x})-[\\eta(\\mathbf{x})+\\delta(\\mathbf{x})]\$"))
+    #if size(exp_resp)[2] > 1
+    #    Plots.scatter!(exp_resp .- mean(exp_resp,dims=2),color=8,label=false)
+    #end
 
     save_plots ? Plots.savefig(p,"$(mdl_apnd)_calibrated_model_error.png") : nothing
     show_plots ? Plots.display(p) : nothing
@@ -532,35 +603,72 @@ Function to plot the surrogate model and data model estimations.
 * `save_plots::Bool` Indicator of whether to save the plot that is generated.
 * `show_plots::Bool` Indicator of whether to display the plot that is generated.
 """
-function plot_prediction!(thetas::Array{Float64},samples::GriddyPosteriors,data::DataStr,
-    scales::Scaling,save_plots::Bool,show_plots::Bool,mdl_apnd::String)
+function plot_prediction!(theta_idx::Vector{Int},samples::GriddyPosteriors,
+    grid_resp::Array{Float64},data::DataStr,scales::Scaling,
+    save_plots::Bool,show_plots::Bool,mdl_apnd::String)
     
-    exp_resp = normalize_var(data.exp.y,scales.y)
+    nloc = size(data.exp.y)[1]
+    nx = size(data.exp.x)[2]
+    exp_resp = unnormalize_var(data.exp.y,scales.y)
 
+    response = unnormalize_var(grid_resp[theta_idx,:],scales.y)
 
-    response .= grid[theta,:]
-
-    p = plot_credible_bounds(response,x_coords)
-    if length(size(exp_resp)) > 1
-        Plots.scatter!(exp_resp',color=4,label="Experimental Observations")
-    else
-        Plots.scatter!(exp_resp,color=4,label="Experimental Observations")
-    end
-    title!("Surrogate Model Prediction")
-    ylabel!(LaTeXString("\\eta(\\mathbf{x})"))
+    p = plot_credible_bounds(response,data.exp.x,scales.x)
+    Plots.scatter!(exp_resp[:,1],color=8,label="Experiments")
+    Plots.scatter!(exp_resp[:,2:end],color=8,label=false)
+    title!("Calibrated Surrogate Model")
+    ylabel!(LaTeXString("\$\\eta (\\mathbf{x})\$"))
 
     save_plots ? Plots.savefig(p,"$(mdl_apnd)_calibrated_surrogate_model.png") : nothing
     show_plots ? Plots.display(p) : nothing
 
-    if length(size(data.exp.y)) > 1
-        error = response .+ samples.delta .- mean(exp_resp)
-    else
-        error = response .+ samples.delta .- exp_resp
+    mean_eta = vec(mean(response,dims=1))
+    eta_bounds = Array{Float64}(undef,2,nloc)
+    error_bounds = similar(eta_bounds)
+    error_samples = Array{Float64}(undef,size(response)[1],nloc)
+    sigma = Array{Float64}(undef,nloc,nloc)
+    identity = Matrix(1.0I,nloc,nloc)
+    for i in axes(error_samples)[1]
+        rho_vec = repeat([samples.rho[i]],nx)
+        corr = correlation_construct(rho_vec,data.exp.x,nx,nloc)
+        sigma .= samples.tau2[i] .* (identity) .+ samples.sig_star2[i] .*
+            corr
+        error_samples[i,:] .= rand(MvNormal(sigma),1)
     end
 
-    p = plot_credible_bounds(error,data.exp.x)
-    title!("Calibrated Model Error Estimation")
-    ylabel!(LaTeXString("y(\\mathbf{x})-\\eta(\\mathbf{x})+\\delta(\\mathbf{x})"))
+    for i in axes(response)[2]
+        eta_bounds[:,i] = quantile(response[:,i],[0.025,0.975])
+        error_bounds[:,i] = quantile(error_samples[:,i],[0.025,0.975])
+    end
+    lb = eta_bounds[1,:] .+ error_bounds[1,:]
+    ub = eta_bounds[2,:] .+ error_bounds[2,:]
+    lb = vec(lb)
+    ub = vec(ub)
+    p = Plots.plot(mean_eta,label="Mean Surrogate Response")
+    Plots.scatter!(exp_resp[:,1],color=8,label="Experiments")
+    Plots.scatter!(exp_resp[:,2:end],color=8,label=false)
+    Plots.plot!(lb,fillrange=ub,label="Uncertainty Bounds",alpha=0.2,lw=1)
+    Plots.plot!(hcat(lb,ub),label=false,lw=1,color=3)
+    title!("Estimated Uncertainty Bounds")
+    xlabel!("Control Variable Indices")
+    ylabel!(LaTeXString("\$y(\\mathbf{x})\$"))
+    
+    save_plots ? Plots.savefig(p,"$(mdl_apnd)_uncertainty.png") : nothing
+    show_plots ? Plots.display(p) : nothing
+
+
+    if size(data.exp.y)[2] > 1
+        error = response .- mean(exp_resp,dims=2)'
+    else
+        error = response .- exp_resp'
+    end
+
+    p = plot_credible_bounds(error,data.exp.x,scales.x)
+    title!("Data Model Mean Error Estimation")
+    ylabel!(LaTeXString("\$y(\\mathbf{x})-\\eta(\\mathbf{x})\$"))
+    #if size(exp_resp)[2] > 1
+    #    Plots.scatter!(exp_resp .- mean(exp_resp,dims=2),color=8,label=false)
+    #end
 
     save_plots ? Plots.savefig(p,"$(mdl_apnd)_calibrated_model_error.png") : nothing
     show_plots ? Plots.display(p) : nothing
@@ -604,13 +712,18 @@ function make_estimate_table(samples::BulkVarsStruct,nx::Int,ntheta::Int,mdl_apn
             estimates[:,i+1] = get_estimates(samples.rho[:,i])
         end
         estimates[:,end-1] = get_estimates(samples.sig2)
-        var_labs = vcat(["Value"],[LaTeXString("\$\\rho_{$i}\$") for i in 1:nx],
+        var_labs_tex = vcat(["Value"],[LaTeXString("\$\\rho_{$i}\$") for i in 1:nx],
             [LaTeXString("\$\\theta_{$j}\$") for j in 1:ntheta],
             [LaTeXString("\$\\sigma\$"),LaTeXString("\$\\tau\$")])
+        var_labs = vcat(["Value"],["ρ $i" for i in 1:nx],
+            ["θ $j" for j in 1:ntheta],
+            ["σ","τ"])
     else
         estimates = Array{Float64}(undef,4,ntheta+3)
-        var_labs = vcat(["Value"],[LaTeXString("\$\\theta_{$j}\$") for j in 1:ntheta],
+        var_labs_tex = vcat(["Value"],[LaTeXString("\$\\theta_{$j}\$") for j in 1:ntheta],
             [LaTeXString("\$\\tau\$")])
+        var_labs = vcat(["Value"],["θ $j" for j in 1:ntheta],
+        ["τ"])
     end
     for i in 1:ntheta
         estimates[:,i+nx+1] = get_estimates(samples.theta[:,i])
@@ -626,6 +739,9 @@ function make_estimate_table(samples::BulkVarsStruct,nx::Int,ntheta::Int,mdl_apn
     open("$(mdl_apnd)_param_estimates.txt","w") do file
         pretty_table(file,estimates;header=var_labs)
     end
+    open("$(mdl_apnd)_param_estimates_LaTeX.txt","w") do file
+        pretty_table(file,estimates;header=var_labs_tex,backend=Val(:latex))
+    end
 end
 
 """
@@ -638,32 +754,40 @@ Keyword arguments
 * `nx::Int` number of x variables.
 * `ntheta::Int` number of theta variables.
 """
-function make_estimate_table!(samples::GriddyPosteriors,nx::Int,ntheta::Int,mdl_apnd::String)
+function make_estimate_table(samples::GriddyPosteriors,nx::Int,ntheta::Int,mdl_apnd::String)
     if nx > 0
         estimates = Array{Float64}(undef,4,ntheta+4)
         estimates[:,2] = get_estimates(samples.rho)
         estimates[:,end-1] = get_estimates(samples.sig_star2)
-        var_labs = vcat(["Value"],[LaTeXString("\\rho")],
-            [LaTeXString("\\theta_{$i}") for j in 1:ntheta],
-            [LaTeXString("\\sigma^{*}"),LaTeXString("\\tau")])
+        var_labs_tex = vcat(["Value"],[LaTeXString("\$\\rho\$")],
+            [LaTeXString("\$\\theta_{$j}\$") for j in 1:ntheta],
+            [LaTeXString("\$\\sigma\$"),LaTeXString("\$\\tau\$")])
+        var_labs = vcat(["Value"],["ρ"],
+            ["θ $j" for j in 1:ntheta],
+            ["σ","τ"])
     else
         estimates = Array{Float64}(undef,4,ntheta+3)
-        var_labs = vcat(["Value"],[LaTeXString("\\theta_{$i}") for j in 1:ntheta],
-            [LaTeXString("\\tau")])
+        var_labs_tex = vcat(["Value"],[LaTeXString("\$\\theta_{$i}\$") for j in 1:ntheta],
+            [LaTeXString("\$\\tau\$")])
+        var_labs = vcat(["Value"],["θ $j" for j in 1:ntheta],
+            ["τ"])
     end
     for i in 1:ntheta
-        estimates[:,i+nx+1] = get_estimates(samples.theta[:,i])
+        estimates[:,i+2] = get_estimates(samples.theta[:,i])
     end
     estimates[:,end] = get_estimates(samples.tau2)
     param_labs = ["95% Lower Bound","Median","Mean","95% Upper Bound"]
     
-    estimates = string.(round(estimates,digits=5))
+    estimates = string.(round.(estimates,digits=5))
     estimates[:,1] = param_labs
 
-    pretty_table(estimates;header=var_lab)
+    pretty_table(estimates;header=var_labs)
 
     open("$(mdl_apnd)_param_estimates.txt","w") do file
-        pretty_table(file,estimates;header=var_lab)
+        pretty_table(file,estimates;header=var_labs)
+    end
+    open("$(mdl_apnd)_param_estimates_LaTeX.txt","w") do file
+        pretty_table(file,estimates;header=var_labs_tex,backend=Val(:latex))
     end
 end
 
@@ -687,16 +811,13 @@ Optional arguments
 * `nbins::Int` The number of bins to use for histograms.
   * default value of 30
 """
-function post_process(samples::BulkVarsStruct,model,data::DataStr,nx::Int,ntheta::Int,
+function post_process(samples::BulkVarsStruct,data::DataStr,nx::Int,ntheta::Int,
     nburn::Int,scales::Scaling;make_plots::Bool=true,save_plots::Bool=true,
     show_plots::Bool=true,nthin::Int=20,nbins::Int=30,mdl_apnd::String="")
-    println(size(samples.eta))
+    
     samples = remove_burn(samples,nburn)
-    println(size(samples.eta))
     samples = thin_samples(samples,nthin)
-    println(size(samples.eta))
     scaled_samples = normalize_samples(samples,scales)
-    println(size(samples.eta))
     sqrt_variance!(scaled_samples)
 
     if make_plots
@@ -720,7 +841,66 @@ function post_process(samples::BulkVarsStruct,model,data::DataStr,nx::Int,ntheta
                     save_plots,show_plots,mdl_apnd)
             end
             plot_disc!(scaled_samples.delta,data.exp.x,scales,nbins,save_plots,show_plots,mdl_apnd)
-            plot_prediction!(model,samples.theta,scaled_samples,data,scales,nx,save_plots,show_plots,mdl_apnd)
+            plot_prediction!(scaled_samples,data,scales,save_plots,show_plots,mdl_apnd)
+        end
+    end
+    make_estimate_table(scaled_samples,nx,ntheta,mdl_apnd)
+end
+
+"""
+    post_process(samples::BulkVarsStruct,nx::Int,ntheta::Int,nburn::Int,scales::Scaling,make_plots::Bool,save_plots::Bool,show_plots::Bool)
+    post_process(samples::BulkVarsStruct,nx::Int,ntheta::Int,nburn::Int,scales::Scaling,make_plots::Bool,save_plots::Bool,show_plots::Bool,nbins::Int,nthin::Int)
+Wrapper function to post-process the posterior samples.
+
+---
+Keyword arguments
+* `samples::BulkVarsStruct` Struct containing the posterior samples.
+* `nx::Int` Number of x dimensions.
+* `ntheta::Int` number of θ dimensions.
+* `nburn::Int` The number of samples to burn.
+* `make_plots::Bool` Indicator of whether to make plots.
+* `save_plots::Bool` Indicator of whether to save the plots.
+* `show_plots::Bool` Indicator of whether to show the plots.
+Optional arguments
+* `nthin::Int` The number of samples to skip when thinning.
+  * default value of 20
+* `nbins::Int` The number of bins to use for histograms.
+  * default value of 30
+"""
+function post_process(samples::GriddyVarsStruct,data::DataStr,nx::Int,ntheta::Int,
+    nburn::Int,scales::Scaling,theta_grid::Array{Float64},sig_grid::Array{Float64},
+    grid_resp::Array{Float64};make_plots::Bool=true,save_plots::Bool=true,
+    show_plots::Bool=true,nthin::Int=20,nbins::Int=30,mdl_apnd::String="")
+
+    scaled_samples = normalize_samples(samples,scales,theta_grid,
+        sig_grid,true)
+    scaled_samples = remove_burn(scaled_samples,nburn)
+    scaled_samples = thin_samples(scaled_samples,nthin)
+    samples = remove_burn(samples,nburn)
+    samples = thin_samples(samples,nthin)
+    sqrt_variance!(scaled_samples)
+
+    if make_plots
+        posterior_hist!(scaled_samples.tau2,nbins,"tau",0,save_plots,show_plots,mdl_apnd)
+        trace_plot!(scaled_samples.tau2,"tau",0,save_plots,show_plots,mdl_apnd)
+        posterior_hist!(scaled_samples.sig_star2,nbins,"sigma",0,save_plots,show_plots,mdl_apnd)
+        trace_plot!(scaled_samples.sig_star2,"sigma",0,save_plots,show_plots,mdl_apnd)
+        #plot_correlation(samples.theta,"theta",save_plots,show_plots,mdl_apnd)
+        for theta in 1:ntheta
+            posterior_hist!(scaled_samples.theta[:,theta],nbins,"theta",
+                theta,save_plots,show_plots,mdl_apnd)
+            trace_plot!(scaled_samples.theta[:,theta],"theta",
+                theta,save_plots,show_plots,mdl_apnd)
+        end
+        if nx > 0
+            #plot_correlation(samples.rho,"rho",save_plots,show_plots,mdl_apnd)
+            posterior_hist!(scaled_samples.rho,nbins,"rho",0,
+                save_plots,show_plots,mdl_apnd)
+            trace_plot!(scaled_samples.rho,"rho",0,
+                save_plots,show_plots,mdl_apnd)
+
+            plot_prediction!(samples.theta,scaled_samples,grid_resp,
+                data,scales,save_plots,show_plots,mdl_apnd)
         end
     end
     make_estimate_table(scaled_samples,nx,ntheta,mdl_apnd)
