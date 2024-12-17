@@ -119,13 +119,20 @@ Let η be the surrogate model's prediction of the response variabeles, y, for th
 The likelihood is calculated following:
 L(θ,τ^2|y)=∏^m [N(η,τ)]
 """
-function lik_nox(data::DataStr,vars::UpdatedVars)
-    
-    thetas_model = thetas'
-    eta = predict_y_all(hcat(data.exp.x,thetas_model))
+function lik_nox(data::DataStr,theta::Vector{Float64},tau2::Float64,model)
+    eta = predict_y_all(theta,model)
 
     mean = eta
-    tau2 = vars.tau2
+
+    response = data.exp.y
+
+    likelihood = prod(pdf.(Normal(mean,sqrt(tau2)),response))
+
+    return likelihood
+end
+
+function lik_nox(data::DataStr,eta::Vector{Float64},tau2::Float64)
+    mean = eta
 
     response = data.exp.y
 
@@ -157,17 +164,24 @@ Let η be the surrogate model's prediction of the response variabeles, y, for th
 The likelihood is calculated following:
 L(θ,τ^2|y)=Σ^m [log(N(η,τ))]
 """
-function loglik_nox(data::DataStr,vars::UpdatedVars)
-    
-    thetas_model = thetas'
-    eta = predict_y_all(hcat(data.exp.x,thetas_model))
+function loglik_nox(data::DataStr,theta::Vector{Float64},tau2::Float64,model)
+    eta = predict_y_all(theta,model)[1]
 
     mean = eta
-    tau2 = vars.tau2
 
     response = data.exp.y
 
-    log_likelihood = sum(logpdf.(Normal(mean,sqrt(tau2)),response))
+    likelihood = sum(logpdf.(Normal(mean,sqrt(tau2)),response))
 
-    return log_likelihood
+    return likelihood
+end
+
+function loglik_nox(data::DataStr,eta::Float64,tau2::Float64)
+    mean = eta
+
+    response = data.exp.y
+
+    likelihood = sum(logpdf.(Normal(mean,sqrt(tau2)),response))
+
+    return likelihood
 end

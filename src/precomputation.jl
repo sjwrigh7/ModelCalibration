@@ -22,6 +22,10 @@ function scaled_sse(y_hat::Vector{Float64},sigma_inv::Array{Float64},y_bar::Vect
     return sse
 end
 
+function scaled_sse(y_hat::Float64,y::Array{Float64})
+    sse = sum((y_hat .- y).^2)
+    return sse
+end
 """
     preallocate(data::DataStr,grid::GridData)
 Function to preallocate Arrays for precomputation in Griddy Gibbs approach.
@@ -39,37 +43,42 @@ Returns
 * `rho::Array{Float64}` An initialized Array to store the values of ρ for precomputation.
 * `sig_star2::Vector{Float64}` An initialized Vector to store the values of σ*^2 for precomputation.
 """
-function preallocate(theta_grid::Array{Float64},sig_grid::GridData)
+function preallocate(theta_grid::Array{Float64},sig_grid::GridData,nx::Int)
     nsim = size(unique(theta_grid,dims=1))[1]
-
-    rho = Vector{Float64}(undef,sig_grid.rho.density)
-    sig_star2 = Vector{Float64}(undef,sig_grid.sig_star2.density)
-
-    sig_det = Array{Float64}(undef,sig_grid.rho.density,sig_grid.sig_star2.density)
-    sig_design = Array{Float64}(undef,sig_grid.rho.density,sig_grid.sig_star2.density,2)
-
-    c_sse = Array{Float64}(undef,nsim,sig_grid.rho.density,sig_grid.sig_star2.density)
-
-    rho_step = (sig_grid.rho.bounds.max - sig_grid.rho.bounds.min)/(sig_grid.rho.density-1)
-    rho = (:)(sig_grid.rho.bounds.min,rho_step,sig_grid.rho.bounds.max)
     
-    #sig_star2_step = (log(grid.sig_star2.bounds.max) - log(grid.sig_star2.bounds.min))/
-    #(grid.sig_star2.density-1)
-    #sig_star2 = exp.((:)(log(grid.sig_star2.bounds.min),sig_star2_step,log(grid.sig_star2.bounds.max)))
-    sig_star2_step = (sqrt(sig_grid.sig_star2.bounds.max) - sqrt(sig_grid.sig_star2.bounds.min))/
-    (sig_grid.sig_star2.density-1)
-    sig_star2 = ((:)(sqrt(sig_grid.sig_star2.bounds.min),sig_star2_step,sqrt(sig_grid.sig_star2.bounds.max))).^2
-    #sig_star2_step = (grid.sig_star2.bounds.max - grid.sig_star2.bounds.min)/(grid.sig_star2.density - 1)
-    #sig_star2 = (:)(grid.sig_star2.bounds.min,sig_star2_step,grid.sig_star2.bounds.max)
+    if nx > 0
+        rho = Vector{Float64}(undef,sig_grid.rho.density)
+        sig_star2 = Vector{Float64}(undef,sig_grid.sig_star2.density)
 
-    for j in eachindex(sig_star2)
-        for i in axes(rho)[1]
-            sig_design[i,j,1] = rho[i]
-            sig_design[i,j,2] = sig_star2[j]
+        sig_det = Array{Float64}(undef,sig_grid.rho.density,sig_grid.sig_star2.density)
+        sig_design = Array{Float64}(undef,sig_grid.rho.density,sig_grid.sig_star2.density,2)
+
+        c_sse = Array{Float64}(undef,nsim,sig_grid.rho.density,sig_grid.sig_star2.density)
+
+        rho_step = (sig_grid.rho.bounds.max - sig_grid.rho.bounds.min)/(sig_grid.rho.density-1)
+        rho = (:)(sig_grid.rho.bounds.min,rho_step,sig_grid.rho.bounds.max)
+        
+        #sig_star2_step = (log(grid.sig_star2.bounds.max) - log(grid.sig_star2.bounds.min))/
+        #(grid.sig_star2.density-1)
+        #sig_star2 = exp.((:)(log(grid.sig_star2.bounds.min),sig_star2_step,log(grid.sig_star2.bounds.max)))
+        sig_star2_step = (sqrt(sig_grid.sig_star2.bounds.max) - sqrt(sig_grid.sig_star2.bounds.min))/
+        (sig_grid.sig_star2.density-1)
+        sig_star2 = ((:)(sqrt(sig_grid.sig_star2.bounds.min),sig_star2_step,sqrt(sig_grid.sig_star2.bounds.max))).^2
+        #sig_star2_step = (grid.sig_star2.bounds.max - grid.sig_star2.bounds.min)/(grid.sig_star2.density - 1)
+        #sig_star2 = (:)(grid.sig_star2.bounds.min,sig_star2_step,grid.sig_star2.bounds.max)
+
+        for j in eachindex(sig_star2)
+            for i in axes(rho)[1]
+                sig_design[i,j,1] = rho[i]
+                sig_design[i,j,2] = sig_star2[j]
+            end
         end
-    end
 
-    return c_sse,sig_det,sig_design
+        return c_sse,sig_det,sig_design
+    else
+        c_sse = Vector{Float64}(undef,nsim)
+        return c_sse,nothing,nothing
+    end
 end
 
 """
@@ -92,7 +101,7 @@ function precompute!(grid_response::Array{Float64,2},data::DataStr,c_sse::Array{
     ident = Matrix(1.0I,nloc,nloc)
 
     y_bar = vec(mean(data.exp.y,dims=2))
-    nobs = size(data.exp.y)[2]
+    nreps = size(data.exp.y)[2]
 
     @showprogress 1 "Precomputing..." for j in 1:size(sig_design)[2] #loop over σ*^2
         for i in 1:size(sig_design)[1] #loop over ρ
@@ -101,8 +110,16 @@ function precompute!(grid_response::Array{Float64,2},data::DataStr,c_sse::Array{
             sig_det[i,j] = log(det(sigma)^(-nobs/2))
             sig_inv .= inv(sigma)
             for k in 1:size(grid_response)[1]
-                c_sse[k,i,j] = scaled_sse(grid_response[k,:],sig_inv,y_bar,nobs)
+                c_sse[k,i,j] = scaled_sse(grid_response[k,:],sig_inv,y_bar,nreps)
             end
         end
+    end
+end
+
+function precompute!(grid_response::Array{Float64,2},data::DataStr,c_sse::Vector{Float64},
+    sig_det::Nothing,sig_design::Nothing,nx::Int)
+
+    @showprogress 1 "Precomputing..." for k in 1:size(grid_response)[1]
+        c_sse[k] = scaled_sse(grid_response[k,1],data.exp.y)
     end
 end

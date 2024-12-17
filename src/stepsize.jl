@@ -439,7 +439,7 @@ Returns
 """
 function find_stepsize(model,data::DataStr,nbatch::Int,batchsize::Int,prior_data::PriorData,
     nx::Int,ntheta::Int,nloc::Int;theta_init::Union{Vector{Float64},Float64}=0.5,
-    method::Int=1,make_plots::Bool=true,show_plots::Bool=true,save_plots::Bool=true,
+    make_plots::Bool=true,show_plots::Bool=true,save_plots::Bool=true,
     init::Float64=1e-3,target::Vector{Float64}=[0.3,0.3],eta::Float64=0.3,
     scale::Float64 = 2.0,shape::Float64=10.0,offset::Float64=1.5,mdl_apnd::String="")
 
@@ -447,13 +447,8 @@ function find_stepsize(model,data::DataStr,nbatch::Int,batchsize::Int,prior_data
         theta_init = repeat([theta_init],ntheta)
     end
 
-    if method == 1
-        stepsize,stepsize_hist,acceptance_hist = auto_stepsize(model,data,nbatch,batchsize,prior_data,nx,
+    stepsize,stepsize_hist,acceptance_hist = auto_stepsize(model,data,nbatch,batchsize,prior_data,nx,
         ntheta,nloc,theta_init,init,target,scale,shape,offset)
-    elseif method == 2
-        stepsize,stepsize_hist,acceptance_hist = stepsize_gd(model,data,nbatch,batchsize,prior_data,nx,
-        ntheta,nloc,theta_init,init,target,eta)
-    end
 
     make_plots ? plot_stepsize_opt(stepsize_hist,acceptance_hist,nx,ntheta,show_plots,save_plots,mdl_apnd) : nothing
 

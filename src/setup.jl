@@ -43,7 +43,7 @@ function setup(design_raw::Array{Float64},simobs_raw::Vector{Float64},
     if nx > 0                                                          # calculate number of unique observation settings in data (checks for univariate and multivariate data)
         nloc = size(unique(design_raw[:,1:nx],dims=1))[1]       
     else
-        nloc = 0
+        nloc = 1
     end
     
     nrep = Int(nobs_tot/nloc)                                          # calculate number of repeated independent experimental observations
@@ -63,15 +63,22 @@ function setup(design_raw::Array{Float64},simobs_raw::Vector{Float64},
     y_min = minimum(vcat(vec(simobs_raw),expobs_raw[:,end]))
     y_max = maximum(vcat(vec(simobs_raw),expobs_raw[:,end]))
     
+    println(y_min)
+    println(y_max)
     # check if experimental control settings match with computer simulator control settings
     if expobs_raw[1:nloc,1:nx] != design_raw[1:nloc,1:nx]
         @warn "Computer simulator independent control variable (x) settings do not match experimental values. This may result in errors during calibration."
     end
     
-    # calculate the minimum and maximum values for x from simulation and experiments
-    x_min = [minimum(vcat(design_raw[:,i],expobs_raw[:,i])) for i in 1:nx]
-    x_max = [maximum(vcat(design_raw[:,i],expobs_raw[:,i])) for i in 1:nx]
-
+    if nx > 0
+        # calculate the minimum and maximum values for x from simulation and experiments
+        x_min = [minimum(vcat(design_raw[:,i],expobs_raw[:,i])) for i in 1:nx]
+        x_max = [maximum(vcat(design_raw[:,i],expobs_raw[:,i])) for i in 1:nx]
+    else
+        x_min = 0.0
+        x_max = 1.0
+    end
+    
     scales = Scaling(
         theta=ScalePar(min=theta_min,max=theta_max),
         y=ScalePar(min=y_min,max=y_max),
