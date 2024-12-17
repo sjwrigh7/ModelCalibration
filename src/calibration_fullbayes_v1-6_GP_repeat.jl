@@ -158,11 +158,11 @@ ntrial = 500 #number of iterations of the stepsize algorithm
 
 #input prior distribution hyperparameters
 #data error
-alpha_tau2 = 0.00000001
-beta_tau2 = 0.00000001
-#discrepancy variance
 alpha_sig2 = 0.00000001
 beta_sig2 = 0.00000001
+#discrepancy variance
+alpha_tau2 = 0.00000001
+beta_tau2 = 0.00000001
 #discrepancy correlation
 a_rho = 1.0
 b_rho = 1.0
@@ -193,7 +193,7 @@ temp = readdlm(pth_exp*"model_exphfl_soi-25_ny-$ny"*"_nsim-1_disc-40_truesim.txt
 expobs_scale[:,end] .= temp[:,end]
 
 nobs,nrep,nloc,scales,data,priors = setup(design_scale,simobs_scale,
-expobs_scale,nx,ntheta,alpha_tau2,beta_tau2,alpha_sig2,beta_sig2,a_rho,b_rho)
+expobs_scale,nx,ntheta,alpha_sig2,beta_sig2,alpha_tau2,beta_tau2,a_rho,b_rho)
 
 mdl = "/home/stephenw/Nextcloud/Documents/engr/PhD/calibration code/griddy_gibbs/test_res/comparison/trad/data_type/truth/ny_$ny-"
 
@@ -297,12 +297,12 @@ function lik( data::DataStr,vars::UpdatedVars,
     response = data.exp.y                             #repsonse data
     sz = size(eta)[1]
 
-    tau2 = vars.tau2[1,1]                             #pull tau^2
-    covariance = tau2*Matrix(1.0I,sz,sz)              #calculate covar matrix
+    sig2 = vars.sig2[1,1]                             #pull tau^2
+    covariance = sig2*Matrix(1.0I,sz,sz)              #calculate covar matrix
     covariance = covariance + Matrix(sqrt(eps(Float64))I,sz,sz)
     covariance = 0.5*(covariance' + covariance)    #ensure symmetry for stability
 
-    likelihood = prod(pdf(MvNormal(mean,tau2*Matrix(1.0I,sz,sz)),response)) #likelihood
+    likelihood = prod(pdf(MvNormal(mean,sig2*Matrix(1.0I,sz,sz)),response)) #likelihood
 
     return likelihood
 end
@@ -315,11 +315,11 @@ function lik_nox( data::DataStr,vars::UpdatedVars,
     eta = predict_y_all(thetas')
 
     mean = eta
-    tau2 = vars.tau2
+    sig2 = vars.sig2
 
     response = data.exp.y
 
-    likelihood = prod(pdf.(Normal(mean,sqrt(tau2)),response))
+    likelihood = prod(pdf.(Normal(mean,sqrt(sig2)),response))
 
     return likelihood
 end
@@ -340,14 +340,14 @@ function prior_delta(vars::UpdatedVars,data::DataStr,rho::Vector{Float64},
     nx::Int64,nobs::Int64)
     
     delta = vars.delta        #pull delta
-    sig2 = vars.sig2[1]       #pull sig2
+    tau2 = vars.tau2[1]       #pull tau2
     rho = rho                 #pull rho
     x = data.exp.x            #pull x
 
     response = delta          
     mean = repeat([0],length(delta))  #mean of delta prior
 
-    covar = sig2*correlation_construct(rho,x,nx,nobs) #calc covar matrix
+    covar = tau2*correlation_construct(rho,x,nx,nobs) #calc covar matrix
     pdf_val = pdf(MvNormal(mean,covar),response)      #calculate pdf val
     return pdf_val
 end
@@ -486,10 +486,10 @@ end
 #### gibbs update for sig^2
 # inputs: prior data, data, MCMC iter vals, number of x and obs
 # returns: gibbs sample for sig^2
-function gibbs_sig2(prior_data::PriorData,data::DataStr,vars::UpdatedVars,
+function gibbs_tau2(prior_data::PriorData,data::DataStr,vars::UpdatedVars,
     nx::Int64,nobs::Int64)
-    alpha = prior_data.sig2.par1 #pull prior hyperparams
-    beta = prior_data.sig2.par2
+    alpha = prior_data.tau2.par1 #pull prior hyperparams
+    beta = prior_data.tau2.par2
     delta = vars.delta           #pull discrepance values
     x = data.exp.x               #pull exp x vals
 
@@ -503,9 +503,9 @@ end
 #### gibbs update for tau^2
 # inputs: prior data, data, MCMC iter vals, model
 # returns: gibbs sample for tau^2
-function gibbs_tau2(prior_data::PriorData,data::DataStr,vars::UpdatedVars)
-    alpha = prior_data.tau2.par1    #pull prior hyperparams
-    beta = prior_data.tau2.par2      
+function gibbs_sig2(prior_data::PriorData,data::DataStr,vars::UpdatedVars)
+    alpha = prior_data.sig2.par1    #pull prior hyperparams
+    beta = prior_data.sig2.par2      
     theta = vars.theta              #pull theta
     delta = vars.delta              #pull discrepancy
     x = data.exp.x                  # pull x and y
@@ -537,9 +537,9 @@ function gibbs_delta(data::DataStr,vars::UpdatedVars)
     y = data.exp.y
 
     #calc covar matrix
-    C = vars.sig2[1,1]*correlation_construct(vars.rho,x,nx,nobs)
+    C = vars.tau2[1,1]*correlation_construct(vars.rho,x,nx,nobs)
 
-    tau2 = vars.tau2[1,1]   #pull theta and tau^2
+    sig2 = vars.sig2[1,1]   #pull theta and tau^2
     theta = vars.theta
 
     #generate matrix of current thetas for prediction
@@ -550,7 +550,7 @@ function gibbs_delta(data::DataStr,vars::UpdatedVars)
     #prediction from surrogate model
     eta = predict_y_all(theta')
     #calculate values for posterior
-    An = inv(C) + size(y)[2]^2*(1/(tau2))*Matrix(1.0I,size(x)[1],size(x)[1])
+    An = inv(C) + size(y)[2]^2*(1/(sig2))*Matrix(1.0I,size(x)[1],size(x)[1])
 
     covar = inv(An)
     covar = 0.5*(covar + covar') #ensures symmetry for stability
@@ -558,7 +558,7 @@ function gibbs_delta(data::DataStr,vars::UpdatedVars)
     for i in 1:size(y)[2]
         bn_vec[:,i] = (y[:,i]-eta)
     end
-    bn = size(y)[2]^2*1/tau2*mean(bn_vec,dims=2)
+    bn = size(y)[2]^2*1/sig2*mean(bn_vec,dims=2)
     return rand(MvNormal(vec(covar*bn),covar))  #sample from posterior
 end
 
@@ -592,8 +592,8 @@ end
 # inputs: most recent values for theta, delta, tau^2, sig^2, and rho
 # returns: data struct containing most recent values
 function update_vars(theta::Vector{Float64},delta::Vector{Float64},
-    tau2::Float64,sig2::Float64,rho::Vector{Float64})
-    return UpdatedVars(theta,delta,tau2,sig2,rho)
+    sig2::Float64,tau2::Float64,rho::Vector{Float64})
+    return UpdatedVars(theta,delta,sig2,tau2,rho)
 end
 #### main MCMC function
 # inputs: data, number of MCMC samples, prior data, model, bulk variable struct,
@@ -605,7 +605,7 @@ function mcmc(data::DataStr,nmcmc::Int64,prior_data::PriorData,
     stepsize::StepSize,nx::Int64,ntheta::Int64,nobs::Int64)
     #initialize MCMC iter vals
     step_vars = update_vars(bulk_vars.theta[start-1,:],bulk_vars.delta[start-1,:],
-    bulk_vars.tau2[start-1],bulk_vars.sig2[start-1],bulk_vars.rho[start-1,:])
+    bulk_vars.sig2[start-1],bulk_vars.tau2[start-1],bulk_vars.rho[start-1,:])
 
     if size(data.exp.x)[2] == 0
     
@@ -627,8 +627,8 @@ function mcmc(data::DataStr,nmcmc::Int64,prior_data::PriorData,
             end
 
             #gibbs update for tua^2
-            step_vars.tau2 = gibbs_tau2(prior_data,data,step_vars)
-            bulk_vars.tau2[i] = step_vars.tau2[1,1]
+            step_vars.sig2 = gibbs_sig2(prior_data,data,step_vars)
+            bulk_vars.sig2[i] = step_vars.sig2[1,1]
             #gibbs update for sig^2
         end
     else
@@ -654,19 +654,19 @@ function mcmc(data::DataStr,nmcmc::Int64,prior_data::PriorData,
             end
 
             #gibbs update for tua^2
-            step_vars.tau2 = gibbs_tau2(prior_data,data,step_vars)
-            bulk_vars.tau2[i] = step_vars.tau2[1,1]
-            #gibbs update for sig^2
-            step_vars.sig2 = gibbs_sig2(prior_data,data,step_vars,nx,nobs)
+            step_vars.sig2 = gibbs_sig2(prior_data,data,step_vars)
             bulk_vars.sig2[i] = step_vars.sig2[1,1]
+            #gibbs update for sig^2
+            step_vars.tau2 = gibbs_tau2(prior_data,data,step_vars,nx,nobs)
+            bulk_vars.tau2[i] = step_vars.tau2[1,1]
             #gibbs update for discrepancy
             step_vars.delta = gibbs_delta(data,step_vars)
             bulk_vars.delta[i,:] = step_vars.delta
 
             #println(step_vars.theta)
             #println(step_vars.rho)
-            #println(step_vars.tau2)
             #println(step_vars.sig2)
+            #println(step_vars.tau2)
 
         end
     end
@@ -761,7 +761,7 @@ function auto_stepsize(data::DataStr,nruns::Int64,prior_data::PriorData,
     bulk_vars = init_vars(data,nruns,nx,ntheta,theta_init) #initialize large bulk vars
     #initialize MCMC iter vals
     step_vars = update_vars(bulk_vars.theta[1,:],bulk_vars.delta[1,:],
-    bulk_vars.tau2[1],bulk_vars.sig2[1],bulk_vars.rho[1,:])
+    bulk_vars.sig2[1],bulk_vars.tau2[1],bulk_vars.rho[1,:])
 
     rep_vars = init_vars(data,nsize,nx,ntheta,theta_init) #initialize small bulk vars
     
@@ -859,7 +859,7 @@ opt_stepsize[1],nx,ntheta,nobs)
 # inputs: results data
 # returns: text file containing MCMC results
 function print_results(results::BulkVarsStruct,nx,ntheta,nmcmc,nburn,mdl)
-    results_mat = hcat(results.rho,results.theta,results.sig2,results.tau2)
+    results_mat = hcat(results.rho,results.theta,results.tau2,results.sig2)
     results_trim = results_mat[nburn:end,:]
     names_rho = ["rho_$i" for i in 1:nx]
     names_theta = ["theta_$i" for i in 1:ntheta]
@@ -885,18 +885,18 @@ function post(results::BulkVarsStruct,nx::Int64,ntheta::Int64,nburn::Int64,
     #also convert sig^2 and tau^2 to sig and tau
     results.theta = results.theta.*(scaling.theta.max.-scaling.theta.min)' .+
      scaling.theta.min'
-    results.sig2 = sqrt.(results.sig2).*(scaling.y.max-scaling.y.min)
     results.tau2 = sqrt.(results.tau2).*(scaling.y.max-scaling.y.min)
+    results.sig2 = sqrt.(results.sig2).*(scaling.y.max-scaling.y.min)
     results.delta = results.delta.*(scaling.y.max-scaling.y.min)
 
     #generate density and trace plaots for sig and tau
-    (p3 = Plots.plot(results.tau2,legend=false))
+    (p3 = Plots.plot(results.sig2,legend=false))
     xlabel!("Iteration")
     ylabel!("τ Draw Value")
     title!("Data Model Error Trace Plot")
     display(p3)
     Plots.savefig(mdl*"tautrace.png")
-    (p4 = density(results.tau2[nburn:end],legend=false))
+    (p4 = density(results.sig2[nburn:end],legend=false))
     xlabel!("τ")
     ylabel!("Density")
     title!("Data Model Error Density")
@@ -904,13 +904,13 @@ function post(results::BulkVarsStruct,nx::Int64,ntheta::Int64,nburn::Int64,
     Plots.savefig(mdl*"taudens.png")
 
     if nx > 0
-        (p5 = Plots.plot(results.sig2,legend=false))
+        (p5 = Plots.plot(results.tau2,legend=false))
         xlabel!("Iteration")
         ylabel!("σ Draw Value")
         title!("Discrepancy Std. Dev. Trace Plot")
         display(p5)
         Plots.savefig(mdl*"sigtrace.png")
-        p6 = density(results.sig2[nburn:end],legend=false)
+        p6 = density(results.tau2[nburn:end],legend=false)
         xlabel!("σ")
         ylabel!("Density")
         title!("Discrepancy Std. Dev. Density")
@@ -1029,10 +1029,10 @@ function post(results::BulkVarsStruct,nx::Int64,ntheta::Int64,nburn::Int64,
     display(p19)
 
     #generate plsterior estimates and 95% CI for variables
-    post_tau2 = sort(results.tau2[nburn:end])  #sort all variables
+    post_sig2 = sort(results.sig2[nburn:end])  #sort all variables
     
     if nx > 0
-        post_sig2 = sort(results.sig2[nburn:end])
+        post_tau2 = sort(results.tau2[nburn:end])
     end
     
     post_theta = sort(results.theta[nburn:end,:],dims=1)
@@ -1068,20 +1068,20 @@ function post(results::BulkVarsStruct,nx::Int64,ntheta::Int64,nburn::Int64,
     end
 
     if nx > 0
-        estimates[1,end-1] = post_tau2[lb]
-        estimates[2,end-1] = mean(post_tau2)
-        estimates[3,end-1] = median(post_tau2)
-        estimates[4,end-1] = post_tau2[ub]
+        estimates[1,end-1] = post_sig2[lb]
+        estimates[2,end-1] = mean(post_sig2)
+        estimates[3,end-1] = median(post_sig2)
+        estimates[4,end-1] = post_sig2[ub]
     
-        estimates[1,end] = post_sig2[lb]
-        estimates[2,end] = mean(post_sig2)
-        estimates[3,end] = median(post_sig2)
-        estimates[4,end] = post_sig2[ub]
-    else
         estimates[1,end] = post_tau2[lb]
         estimates[2,end] = mean(post_tau2)
         estimates[3,end] = median(post_tau2)
         estimates[4,end] = post_tau2[ub]
+    else
+        estimates[1,end] = post_sig2[lb]
+        estimates[2,end] = mean(post_sig2)
+        estimates[3,end] = median(post_sig2)
+        estimates[4,end] = post_sig2[ub]
     end
 
     #store labels for table
@@ -1110,7 +1110,7 @@ function post(results::BulkVarsStruct,nx::Int64,ntheta::Int64,nburn::Int64,
         pretty_table(f,estimates;header = var_lab)
     end
 
-    eta_pred = Array{Float64}(undef,length(results.tau2[nburn:end]),nobs)
+    eta_pred = Array{Float64}(undef,length(results.sig2[nburn:end]),nobs)
     theta_pred = Array{Float64}(undef,nobs,ntheta)
     for i in 1:size(eta_pred)[1]
         for j in 1:nobs
@@ -1260,7 +1260,7 @@ post(results,nx,ntheta,nburn,data,nmcmc,scales, nobs)
 test_prior = rand(InverseGamma(0.01,0.01),10000)
 test_prior .= sqrt.(test_prior) .* (scales.y.max .- scales.y.min)
 density(test_prior)
-#density!(results.tau2)
+#density!(results.sig2)
 xlims!(0,10)
 =#
 

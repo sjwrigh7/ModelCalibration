@@ -68,7 +68,7 @@ The acceptance probability of θ* is calculated as π(θ*)/π(θ)*J(θ*)/J(θ).
 A random sample form U(0,1) determines if the proposed value is accepted or rejected.
 """
 function metropolis_theta(model,prior_data::PriorData,data::DataStr,
-    theta::Vector{Float64},delta::Vector{Float64},tau2::Float64,
+    theta::Vector{Float64},delta::Vector{Float64},sig2::Float64,
     k::Int64,stepsize::Float64,nloc::Int)
     c1 = 1.0              #scale of theta
     c2 = 0.0              #min value for theta
@@ -79,10 +79,10 @@ function metropolis_theta(model,prior_data::PriorData,data::DataStr,
     prop_theta = expit(c1,c2,prop_gamma)   #transform back to theta
 
     eta_current = predict_y_all(theta,model)
-    log_lik_current = loglik(data,delta,tau2,eta_current,nloc)[1]
+    log_lik_current = loglik(data,delta,sig2,eta_current,nloc)[1]
     theta[k] = prop_theta     #replace theta at index k with prop val
     eta_prop = predict_y_all(theta,model)
-    log_lik_prop = loglik(data,delta,tau2,eta_prop,nloc)[1] #calc likelihood
+    log_lik_prop = loglik(data,delta,sig2,eta_prop,nloc)[1] #calc likelihood
     #calculate jump distribution values
     log_jump_current = logpdf(Normal(current_gamma,stepsize),prop_gamma)+
     log(abs(-(c1)/((prop_theta+c2)*(-c1+prop_theta+c2))))
@@ -130,7 +130,7 @@ The acceptance probability of θ* is calculated as π(θ*)/π(θ)*J(θ*)/J(θ).
 A random sample form U(0,1) determines if the proposed value is accepted or rejected.
 """
 function metropolis_theta_nox(model,prior_data::PriorData,data::DataStr,
-    theta::Vector{Float64},delta::Vector{Float64},tau2::Float64,
+    theta::Vector{Float64},delta::Vector{Float64},sig2::Float64,
     k::Int64,stepsize::Float64)
     c1 = 1.0              #scale of theta
     c2 = 0.0              #min value for theta
@@ -140,10 +140,10 @@ function metropolis_theta_nox(model,prior_data::PriorData,data::DataStr,
     prop_gamma = rand(Normal(current_gamma,stepsize)) #propose new gamma
     prop_theta = expit(c1,c2,prop_gamma)   #transform back to theta
 
-    log_lik_current = loglik_nox(data,theta,delta,tau2,model)[1]
+    log_lik_current = loglik_nox(data,theta,delta,sig2,model)[1]
     theta[k] = prop_theta     #replace theta at index k with prop val
 
-    log_lik_prop = loglik_nox(data,theta,delta,tau2,model)[1] #calc likelihood
+    log_lik_prop = loglik_nox(data,theta,delta,sig2,model)[1] #calc likelihood
 
     #calculate jump distribution values
     log_jump_current = logpdf(Normal(current_gamma,stepsize),prop_gamma)+
@@ -191,7 +191,7 @@ The acceptance probability of ρ* is calculated as π(ρ*)/π(ρ)*J(ρ*)/J(ρ).
 A random sample form U(0,1) determines if the proposed value is accepted or rejected.
 """
 function metropolis_rho(prior_data::PriorData,data::DataStr,
-    rho::Vector{Float64},delta::Vector{Float64},sig2::Float64,
+    rho::Vector{Float64},delta::Vector{Float64},tau2::Float64,
     k::Int64,stepsize::Float64,nx::Int64,nobs::Int64)
 
     c1 = 1.0              #rho scale
@@ -202,10 +202,10 @@ function metropolis_rho(prior_data::PriorData,data::DataStr,
     prop_rho = expit(c1,c2,prop_gamma)           #transform back to rho
 
     corr_current = correlation_construct(rho,data.exp.x,nx,nobs)
-    log_delta_prop = log_prior_delta(delta,corr_current,sig2)[1]
+    log_delta_prop = log_prior_delta(delta,corr_current,tau2)[1]
     rho[k] = prop_rho               #replace rho at k with prop val
     corr_prop = correlation_construct(rho,data.exp.x,nx,nobs)
-    log_delta_current = log_prior_delta(delta,corr_prop,sig2)[1]
+    log_delta_current = log_prior_delta(delta,corr_prop,tau2)[1]
 
     #calc jump distribution pdf
     log_jump_current = logpdf(Normal(current_gamma,stepsize),prop_gamma)+
@@ -230,7 +230,7 @@ function metropolis_rho(prior_data::PriorData,data::DataStr,
 end
 
 """
-    gibbs:sig2(prior_data::PriorData,data::DataStr,vars::UpdatedVars,nx::Int64,nobs::Int64)
+    gibbs:tau2(prior_data::PriorData,data::DataStr,vars::UpdatedVars,nx::Int64,nobs::Int64)
 Function to draw a sample from the posterior distribution of the discrepancy variance term (σ^2).
 
 ---
@@ -253,18 +253,18 @@ Given prior distribution parameters for σ^2 of IG(α,β) and prior distribution
 p(σ^2|.) ∼ IG(α+n/2,β+0.5*δ'*C^-1*δ)
 Where n is the length of the discrepancy term (the same length as the data model's multivariate normal distribution).
 """
-function gibbs_sig2(prior_data::PriorData,
+function gibbs_tau2(prior_data::PriorData,
     delta::Vector{Float64},corr::Array{Float64,2},nloc::Int64)
     
-    par1 = prior_data.sig2.par1 + 0.5*nloc   #calculate posterior params
-    par2 = prior_data.sig2.par2 + 0.5*delta'*inv(corr)*delta
+    par1 = prior_data.tau2.par1 + 0.5*nloc   #calculate posterior params
+    par2 = prior_data.tau2.par2 + 0.5*delta'*inv(corr)*delta
 
     sample = rand(InverseGamma(par1,par2))
     return sample   #sample from posterior
 end
 
 """
-    gibbs_tau2(prior_data::PriorData,data::DataStr,vars::UpdatedVars)
+    gibbs_sig2(prior_data::PriorData,data::DataStr,vars::UpdatedVars)
 Function to draw a sample from the posterior distribution of the data model variance term (τ^2).
 
 ---
@@ -285,18 +285,18 @@ Given prior distribution parameters for τ^2 of IG(α,β) and likelihood functio
 p(τ^2|.) ∼ IG(α+n*m/2,β+0.5*λ'*λ)
 Where n is the length of the multivariate normal distribution in the data model, m is the number of independent observations from this data model, and λ is the vector y_i - η - δ.
 """
-function gibbs_tau2(prior_data::PriorData,data::DataStr,
+function gibbs_sig2(prior_data::PriorData,data::DataStr,
     eta::Vector{Float64},delta::Vector{Float64},
     lik_power::Int,nrep::Int)      
 
-    par1 = prior_data.tau2.par1 + 0.5*lik_power  #calcualte posterior params
+    par1 = prior_data.sig2.par1 + 0.5*lik_power  #calcualte posterior params
 
     sse = Vector{Float64}(undef,nrep)
     for i in axes(data.exp.y)[2]
         sse[i] = (data.exp.y[:,i] - eta - delta)'*(data.exp.y[:,i] - eta - delta)
     end
 
-    par2 = prior_data.tau2.par2 + 0.5*sum(sse)
+    par2 = prior_data.sig2.par2 + 0.5*sum(sse)
 
     sample = rand(InverseGamma(par1,par2))
     return sample  #sample from posterior
@@ -326,13 +326,13 @@ An = (Σ^-1 + m^2(τ^2*I)^-1)^-1
 bn = m^2((τ^2*I)^-1)*(ȳ-η)
 m is the number of independent observations of the multivariate normal data.
 """
-function gibbs_delta(data::DataStr,tau2::Float64,sig2::Float64,
+function gibbs_delta(data::DataStr,sig2::Float64,tau2::Float64,
     eta::Vector{Float64},corr::Array{Float64,2},nloc::Int,nrep::Int)
     #calc covar matrix
-    sig = sig2*corr
+    sig = tau2*corr
 
     #calculate values for posterior
-    An = inv(sig) + nrep*(1/(tau2)) .* Matrix(1.0I,nloc,nloc)
+    An = inv(sig) + nrep*(1/(sig2)) .* Matrix(1.0I,nloc,nloc)
 
     covar = inv(An)
     covar = 0.5*(covar + covar') #ensures symmetry for stability
@@ -340,7 +340,7 @@ function gibbs_delta(data::DataStr,tau2::Float64,sig2::Float64,
     for i in 1:nrep
         bn_vec[:,i] = (data.exp.y[:,i]-eta)
     end
-    bn = nrep*1/tau2*mean(bn_vec,dims=2)
+    bn = nrep*1/sig2*mean(bn_vec,dims=2)
     sample = rand(MvNormal(vec(covar*bn),covar))
     return sample  #sample from posterior
 end

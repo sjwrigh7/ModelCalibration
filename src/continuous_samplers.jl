@@ -98,8 +98,8 @@ function mcmc!(model,data::DataStr,prior_data::PriorData,
     delta = copy(sample_vals.delta[start-1,:])
     theta = copy(sample_vals.theta[start-1,:])
     rho = copy(sample_vals.rho[start-1,:])
-    tau2 = sample_vals.tau2[start-1]
     sig2 = sample_vals.sig2[start-1]
+    tau2 = sample_vals.tau2[start-1]
     eta = sample_vals.eta[start-1,:]
     corr = Array{Float64}(undef,nloc,nloc)
 
@@ -112,7 +112,7 @@ function mcmc!(model,data::DataStr,prior_data::PriorData,
             #metropolis update for θ
             @inbounds for j in 1:ntheta
                 theta_step = metropolis_theta_nox(model,prior_data,data,
-                    theta,delta,tau2,j,stepsize.theta[j])
+                    theta,delta,sig2,j,stepsize.theta[j])
                 
                 theta[j] = theta_step.new_value
                 sample_vals.theta[i,j] = theta[j]
@@ -121,8 +121,8 @@ function mcmc!(model,data::DataStr,prior_data::PriorData,
             end
 
             #gibbs update for τ^2
-            tau2 = gibbs_tau2(prior_data,data,eta,delta,lik_power,nrep)
-            sample_vals.tau2[i] = tau2
+            sig2 = gibbs_sig2(prior_data,data,eta,delta,lik_power,nrep)
+            sample_vals.sig2[i] = sig2
         end
 
     else
@@ -130,7 +130,7 @@ function mcmc!(model,data::DataStr,prior_data::PriorData,
             #metropolis update for θ
             @inbounds for j in 1:ntheta
                 theta_step = metropolis_theta(model,prior_data,data,
-                    theta,delta,tau2,j,stepsize.theta[j],nloc)
+                    theta,delta,sig2,j,stepsize.theta[j],nloc)
 
                 eta .= theta_step[2]
                 theta[j] = theta_step[1].new_value
@@ -143,7 +143,7 @@ function mcmc!(model,data::DataStr,prior_data::PriorData,
             #metropolis update for ρ
             @inbounds for j in 1:nx
                 rho_step = metropolis_rho(prior_data,data,
-                rho,delta,sig2,j,stepsize.rho[j],nx,nloc)
+                rho,delta,tau2,j,stepsize.rho[j],nx,nloc)
                 
                 corr .= rho_step[2]
                 rho[j] = rho_step[1].new_value
@@ -152,15 +152,15 @@ function mcmc!(model,data::DataStr,prior_data::PriorData,
                 sample_vals.ratio[i,j] = rho_step[1].ratio
             end
             #gibbs update for τ^2
-            tau2 = gibbs_tau2(prior_data,data,eta,delta,lik_power,nrep)
-            sample_vals.tau2[i] = tau2
-
-            #gibbs update for σ^2
-            sig2 = gibbs_sig2(prior_data,delta,corr,nloc)
+            sig2 = gibbs_sig2(prior_data,data,eta,delta,lik_power,nrep)
             sample_vals.sig2[i] = sig2
 
+            #gibbs update for σ^2
+            tau2 = gibbs_tau2(prior_data,delta,corr,nloc)
+            sample_vals.tau2[i] = tau2
+
             #gibbs update for δ
-            delta = gibbs_delta(data,tau2,sig2,eta,corr,nloc,nrep)
+            delta = gibbs_delta(data,sig2,tau2,eta,corr,nloc,nrep)
             sample_vals.delta[i,:] .= delta
         end
     end

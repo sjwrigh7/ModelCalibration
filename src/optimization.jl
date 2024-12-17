@@ -95,21 +95,21 @@ function max_lik_sigma(opt_response,data,epochs::Int=7000)
 end
 
 """
-    make_covar(tau2::Float64,nobs::Int)
+    make_covar(sig2::Float64,nobs::Int)
 Simple function to generate a covariance matrix.
 This dispatch (passed only a variance parameter and size of the matrix) will use the τ^2I form.
 
 ---
 Keyword arguments
-* `tau2::Float64` Variance parameter.
+* `sig2::Float64` Variance parameter.
 * `nobs::Int` Size of the square matrix.
 
 ---
 Returns
 * `covar::Array{Float64}` The covariance matrix.
 """
-function make_covar(tau2::Float64,nloc::Int)
-    covar = tau2 .* Matrix(1.0I,nloc,nloc)
+function make_covar(sig2::Float64,nloc::Int)
+    covar = sig2 .* Matrix(1.0I,nloc,nloc)
     return covar
 end
 
@@ -130,7 +130,7 @@ Returns
 function make_covar(params::CovarPars,nloc::Int,nx::Int)
     rho_vec = repeat([params.rho],nx)
     corr_mat = correlation_construct(rho_vec,data.exp.x,nx,nloc)
-    covar = params.tau2 .* Matrix(1.0I,nloc,nloc) .+ params.sig2*corr_mat
+    covar = params.sig2 .* Matrix(1.0I,nloc,nloc) .+ params.tau2*corr_mat
     return covar
 end
 
@@ -147,10 +147,10 @@ Returns
 * `neg_lik::Float64` The negative of the log-likelihood of the data model.
 """
 function covar_opt(covar_pars::Vector{Float64})
-    tau2 = covar_pars[1]
-    sig2 = covar_pars[2]
+    sig2 = covar_pars[1]
+    tau2 = covar_pars[2]
     rho = covar_pars[3]
-    params = CovarPars(tau2=tau2,rho=rho,sig2=sig2)
+    params = CovarPars(sig2=sig2,rho=rho,tau2=tau2)
     covar = make_covar(params,nobs)
     neg_lik = -logpdf(MvNormal(opt_response,covar),data.exp.y)
     return neg_lik
@@ -170,10 +170,10 @@ Returns
 """
 function max_lik_covar(nx::Int,nloc::Int,data,epochs::Int=7000)
     function covar_opt(covar_pars::Vector{Float64})
-        tau2 = covar_pars[1]
-        sig2 = covar_pars[2]
+        sig2 = covar_pars[1]
+        tau2 = covar_pars[2]
         rho = covar_pars[3]
-        params = CovarPars(tau2=tau2,rho=rho,sig2=sig2)
+        params = CovarPars(sig2=sig2,rho=rho,tau2=tau2)
         covar = make_covar(params,nloc,nx)
         neg_lik = -logpdf(MvNormal(opt_response,covar),data.exp.y)
         return neg_lik

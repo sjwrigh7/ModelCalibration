@@ -36,11 +36,11 @@ ntrial = 500 #number of iterations of the stepsize algorithm
 
 #input prior distribution hyperparameters
 #data error
-alpha_tau2 = 0.00000001
-beta_tau2 = 0.00000001
-#discrepancy variance
 alpha_sig2 = 0.00000001
 beta_sig2 = 0.00000001
+#discrepancy variance
+alpha_tau2 = 0.00000001
+beta_tau2 = 0.00000001
 #discrepancy correlation
 a_rho = 1.0
 b_rho = 1.0
@@ -87,7 +87,7 @@ expobs_scale = readdlm(pth_exp*"ny_$ny-expobs_$disc.txt",'\t') #read in original
 ######################################################################
 
 nobs,nrep,nloc,scales,data,priors = setup(design_scale,simobs_scale,
-expobs_scale,nx,ntheta,alpha_tau2,beta_tau2,alpha_sig2,beta_sig2,a_rho,b_rho)
+expobs_scale,nx,ntheta,alpha_sig2,beta_sig2,alpha_tau2,beta_tau2,a_rho,b_rho)
 
 ################
 #Precomputations
@@ -120,7 +120,7 @@ sampling_vars = init_vars(data,nmcmc)
 griddy_gibbs!(data,sampling_vars,c_sse,log_det_sig,sig_design,priors)
 
 #############
-scaled_tau = sqrt.(sampling_vars.tau2[nburn:end]) .* (scales.y.max - scales.y.min)
+scaled_tau = sqrt.(sampling_vars.sig2[nburn:end]) .* (scales.y.max - scales.y.min)
 
 #=
 p_tau_hist = Plots.histogram(scaled_tau,label=false)

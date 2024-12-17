@@ -33,8 +33,8 @@ function lik(data::DataStr,vars::UpdatedVars,model)
     response = data.exp.y                             #repsonse data
     sz = size(eta)[1]
 
-    tau2 = vars.tau2[1,1]                             #pull tau^2
-    covariance = tau2*Matrix(1.0I,sz,sz)              #calculate covar matrix
+    sig2 = vars.sig2[1,1]                             #pull tau^2
+    covariance = sig2*Matrix(1.0I,sz,sz)              #calculate covar matrix
     covariance = covariance + Matrix(sqrt(eps(Float64))I,sz,sz)
     covariance = 0.5*(covariance' + covariance)    #ensure symmetry for stability
 
@@ -63,7 +63,7 @@ This function uses the log of the pdf of the data model.
 L(θ,τ^2,δ|y)=Σ^m [log(MVN(η+δ,τ^2*I))]
 """
 function loglik(data::DataStr,theta::Vector{Float64},
-    delta::Vector{Float64},tau2::Float64,model)
+    delta::Vector{Float64},sig2::Float64,model)
 
     eta = predict_y_all(theta,model) #surogate modle est
 
@@ -71,7 +71,7 @@ function loglik(data::DataStr,theta::Vector{Float64},
     response = data.exp.y                             #repsonse data
     sz = size(eta)[1]
 
-    covariance = tau2*Matrix(1.0I,sz,sz)              #calculate covar matrix
+    covariance = sig2*Matrix(1.0I,sz,sz)              #calculate covar matrix
     covariance = covariance + Matrix(sqrt(eps(Float64))I,sz,sz)
     covariance = 0.5*(covariance' + covariance)    #ensure symmetry for stability
 
@@ -80,14 +80,14 @@ function loglik(data::DataStr,theta::Vector{Float64},
     return log_likelihood
 end
 
-function loglik(data::DataStr,delta::Vector{Float64},tau2::Float64,
+function loglik(data::DataStr,delta::Vector{Float64},sig2::Float64,
     eta::Vector{Float64},nloc::Int)
 
     mean = eta + delta                                #model est
     response = data.exp.y                             #repsonse data
 
     ident = Matrix(1.0I,nloc,nloc)
-    covariance = tau2 .* ident              #calculate covar matrix
+    covariance = sig2 .* ident              #calculate covar matrix
     covariance = covariance + sqrt(eps(Float64)) .* ident
     covariance = 0.5*(covariance' + covariance)    #ensure symmetry for stability
 
@@ -119,24 +119,24 @@ Let η be the surrogate model's prediction of the response variabeles, y, for th
 The likelihood is calculated following:
 L(θ,τ^2|y)=∏^m [N(η,τ)]
 """
-function lik_nox(data::DataStr,theta::Vector{Float64},tau2::Float64,model)
+function lik_nox(data::DataStr,theta::Vector{Float64},sig2::Float64,model)
     eta = predict_y_all(theta,model)
 
     mean = eta
 
     response = data.exp.y
 
-    likelihood = prod(pdf.(Normal(mean,sqrt(tau2)),response))
+    likelihood = prod(pdf.(Normal(mean,sqrt(sig2)),response))
 
     return likelihood
 end
 
-function lik_nox(data::DataStr,eta::Vector{Float64},tau2::Float64)
+function lik_nox(data::DataStr,eta::Vector{Float64},sig2::Float64)
     mean = eta
 
     response = data.exp.y
 
-    likelihood = prod(pdf.(Normal(mean,sqrt(tau2)),response))
+    likelihood = prod(pdf.(Normal(mean,sqrt(sig2)),response))
 
     return likelihood
 end
@@ -164,24 +164,24 @@ Let η be the surrogate model's prediction of the response variabeles, y, for th
 The likelihood is calculated following:
 L(θ,τ^2|y)=Σ^m [log(N(η,τ))]
 """
-function loglik_nox(data::DataStr,theta::Vector{Float64},tau2::Float64,model)
+function loglik_nox(data::DataStr,theta::Vector{Float64},sig2::Float64,model)
     eta = predict_y_all(theta,model)[1]
 
     mean = eta
 
     response = data.exp.y
 
-    likelihood = sum(logpdf.(Normal(mean,sqrt(tau2)),response))
+    likelihood = sum(logpdf.(Normal(mean,sqrt(sig2)),response))
 
     return likelihood
 end
 
-function loglik_nox(data::DataStr,eta::Float64,tau2::Float64)
+function loglik_nox(data::DataStr,eta::Float64,sig2::Float64)
     mean = eta
 
     response = data.exp.y
 
-    likelihood = sum(logpdf.(Normal(mean,sqrt(tau2)),response))
+    likelihood = sum(logpdf.(Normal(mean,sqrt(sig2)),response))
 
     return likelihood
 end

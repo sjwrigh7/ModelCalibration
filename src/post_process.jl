@@ -18,16 +18,16 @@ function normalize_samples(samples::BulkVarsStruct,scales::Scaling,rev::Bool=tru
 
     theta = rev ? unnormalize_var(samples.theta,scales.theta) : 
         normalize_var(samples.theta,scales.theta)
-    sig2 = rev ? (unnormalize_var(sqrt.(samples.sig2),scales.y) .- scales.y.min).^2 :
-        (normalize_var(sqrt.(samples.sig2 .+ scales.y.min),scales.y)).^2
+    tau2 = rev ? (unnormalize_var(sqrt.(samples.tau2),scales.y) .- scales.y.min).^2 :
+        (normalize_var(sqrt.(samples.tau2 .+ scales.y.min),scales.y)).^2
     delta = rev ? unnormalize_var(samples.delta,scales.y) .- scales.y.min :
         normalize_var(samples.delta .+ scales.y.min,scales.y)
     eta = rev ? unnormalize_var(samples.eta,scales.y) :
         normalize_var(samples.eta,scales.y)
-    tau2 = rev ? (unnormalize_var(sqrt.(samples.tau2),scales.y) .- scales.y.min).^2 :
-        (normlize_var(sqrt.(samples.tau2 .+ scales.y.min),scales.y)).^2
+    sig2 = rev ? (unnormalize_var(sqrt.(samples.sig2),scales.y) .- scales.y.min).^2 :
+        (normlize_var(sqrt.(samples.sig2 .+ scales.y.min),scales.y)).^2
     
-    samples_norm = BulkVarsStruct(theta=theta,tau2=tau2,sig2=sig2,delta=delta,
+    samples_norm = BulkVarsStruct(theta=theta,sig2=sig2,tau2=tau2,delta=delta,
         eta=eta,rho=samples.rho,accept=samples.accept,ratio=samples.ratio)
     
     return samples_norm
@@ -57,12 +57,12 @@ function normalize_samples(samples::GriddyVarsStruct,scales::Scaling,theta_grid:
 
     theta = rev ? unnormalize_var(theta_grid[samples.theta],scales.theta) :
         normalize_var(design[samples.theta],scales.theta)
-    tau2 = rev ? (unnormalize_var(sqrt.(samples.tau2),scales.y) .- scales.y.min).^2 :
-    (normlize_var(sqrt.(samples.tau2 .+ scales.y.min),scales.y)).^2
+    sig2 = rev ? (unnormalize_var(sqrt.(samples.sig2),scales.y) .- scales.y.min).^2 :
+    (normlize_var(sqrt.(samples.sig2 .+ scales.y.min),scales.y)).^2
     rho = sig_grid[samples.rho,1,1]
-    sig_star2 = sig_grid[1,samples.sig_star2,2] .* tau2
+    sig_star2 = sig_grid[1,samples.sig_star2,2] .* sig2
 
-    converted_samples = GriddyPosteriors(theta=theta,tau2=tau2,rho=rho,sig_star2=sig_star2)
+    converted_samples = GriddyPosteriors(theta=theta,sig2=sig2,rho=rho,sig_star2=sig_star2)
 
     return converted_samples
 end
@@ -86,24 +86,24 @@ This selects all posterior samples from `nburn` + 1 through the end of the sampl
 These values are retained and placed into a new posterior samples struct, which is then returned.
 """
 function remove_burn(samples::BulkVarsStruct,nburn::Int)
-    if nburn >= length(samples.sig2)
+    if nburn >= length(samples.tau2)
         error("The number of specified to burn is greater than or equal to the total number of samples.
         Please specify a number of samples to burn that is less than the total number of samples.
-        Total number of samples = $(length(samples.sig2))
+        Total number of samples = $(length(samples.tau2))
         Specified burn = $nburn")
     end
     keep = nburn + 1
-    retained = keep:length(samples.sig2)
+    retained = keep:length(samples.tau2)
     theta = samples.theta[retained,:]
     rho = samples.rho[retained,:]
-    tau2 = samples.tau2[retained]
     sig2 = samples.sig2[retained]
+    tau2 = samples.tau2[retained]
     delta = samples.delta[retained,:]
     eta = samples.eta[retained,:]
     accept = samples.accept[retained,:]
     ratio = samples.ratio[retained,:]
 
-    truncated = BulkVarsStruct(theta=theta,rho=rho,tau2=tau2,sig2=sig2,
+    truncated = BulkVarsStruct(theta=theta,rho=rho,sig2=sig2,tau2=tau2,
     delta=delta,eta=eta,accept=accept,ratio=ratio)
     
     return truncated
@@ -128,20 +128,20 @@ This selects all posterior samples from `nburn` + 1 through the end of the sampl
 These values are retained and placed into a new posterior samples struct, which is then returned.
 """
 function remove_burn(samples::GriddyPosteriors,nburn::Int)
-    if nburn >= length(samples.tau2)
+    if nburn >= length(samples.sig2)
         error("The number of specified to burn is greater than or equal to the total number of samples.
         Please specify a number of samples to burn that is less than the total number of samples.
-        Total number of samples = $(length(samples.tau2))
+        Total number of samples = $(length(samples.sig2))
         Specified burn = $nburn")
     end
     keep = nburn + 1
-    retained = keep:length(samples.tau2)
+    retained = keep:length(samples.sig2)
     theta = samples.theta[retained,:]
-    tau2 = samples.tau2[retained]
+    sig2 = samples.sig2[retained]
     sig_star2 = samples.sig_star2[retained]
     rho = samples.rho[retained]
 
-    truncated = GriddyPosteriors(theta=theta,tau2=tau2,sig_star2=sig_star2,
+    truncated = GriddyPosteriors(theta=theta,sig2=sig2,sig_star2=sig_star2,
         rho=rho)
 
     return truncated
@@ -151,20 +151,20 @@ end
 
 """
 function remove_burn(samples::GriddyVarsStruct,nburn::Int)
-    if nburn >= length(samples.tau2)
+    if nburn >= length(samples.sig2)
         error("The number of specified to burn is greater than or equal to the total number of samples.
         Please specify a number of samples to burn that is less than the total number of samples.
-        Total number of samples = $(length(samples.tau2))
+        Total number of samples = $(length(samples.sig2))
         Specified burn = $nburn")
     end
     keep = nburn + 1
-    retained = keep:length(samples.tau2)
+    retained = keep:length(samples.sig2)
     theta = samples.theta[retained]
-    tau2 = samples.tau2[retained]
+    sig2 = samples.sig2[retained]
     sig_star2 = samples.sig_star2[retained]
     rho = samples.rho[retained]
 
-    truncated = GriddyVarsStruct(theta=theta,tau2=tau2,sig_star2=sig_star2,
+    truncated = GriddyVarsStruct(theta=theta,sig2=sig2,sig_star2=sig_star2,
         rho=rho)
 
     return truncated
@@ -189,32 +189,32 @@ Details
 This function selects retains every `nthin`th sample from the posterior samples, starting at the first index and going through to the end.
 """
 function thin_samples(samples::BulkVarsStruct,nthin::Int)
-    if nthin >= length(samples.sig2)
+    if nthin >= length(samples.tau2)
         error("The number of specified to burn is greater than or equal to the total number of samples.
         Please specify a number of samples to burn that is less than the total number of samples.
-        Total number of samples = $(length(samples.sig2))
+        Total number of samples = $(length(samples.tau2))
         Specified thinning = $nthin")
     end
 
-    retained = 1:nthin:length(samples.sig2)
+    retained = 1:nthin:length(samples.tau2)
     if length(retained) < 100
         @warn "The specified thinning rate, $nthin, seems large for the number of posterior samples.
-        Total number of samples =  $(length(samples.sig2))
+        Total number of samples =  $(length(samples.tau2))
         Number of samples retained = $(length(retained))
-        Number of samples discarded = $(length(samples.sig2) - length(retained))
+        Number of samples discarded = $(length(samples.tau2) - length(retained))
         Consider using a smaller thinning rate or drawing more posterior samples."
     end
 
     theta = samples.theta[retained,:]
     rho = samples.rho[retained,:]
-    tau2 = samples.tau2[retained]
     sig2 = samples.sig2[retained]
+    tau2 = samples.tau2[retained]
     delta = samples.delta[retained,:]
     eta = samples.eta[retained,:]
     accept = samples.accept[retained,:]
     ratio = samples.ratio[retained,:]
 
-    thinned = BulkVarsStruct(theta=theta,rho=rho,tau2=tau2,sig2=sig2,
+    thinned = BulkVarsStruct(theta=theta,rho=rho,sig2=sig2,tau2=tau2,
     delta=delta,eta=eta,accept=accept,ratio=ratio)
     
     return thinned
@@ -239,28 +239,28 @@ Details
 This function selects retains every `nthin`th sample from the posterior samples, starting at the first index and going through to the end.
 """
 function thin_samples(samples::GriddyPosteriors,nthin::Int)
-    if nthin >= length(samples.tau2)
+    if nthin >= length(samples.sig2)
         error("The number of specified to burn is greater than or equal to the total number of samples.
         Please specify a number of samples to burn that is less than the total number of samples.
-        Total number of samples = $(length(samples.tau2))
+        Total number of samples = $(length(samples.sig2))
         Specified thinning = $nthin")
     end
 
-    retained = 1:nthin:length(samples.tau2)
+    retained = 1:nthin:length(samples.sig2)
     if length(retained) < 100
         @warn "The specified thinning rate, $nthin, seems large for the number of posterior samples.
-        Total number of samples =  $(length(samples.tau2))
+        Total number of samples =  $(length(samples.sig2))
         Number of samples retained = $(length(retained))
-        Number of samples discarded = $(length(samples.tau2) - length(retained))
+        Number of samples discarded = $(length(samples.sig2) - length(retained))
         Consider using a smaller thinning rate or drawing more posterior samples."
     end
 
     theta = samples.theta[retained,:]
     rho = samples.rho[retained]
-    tau2 = samples.tau2[retained]
+    sig2 = samples.sig2[retained]
     sig_star2 = samples.sig_star2[retained]
     
-    thinned = GriddyPosteriors(theta=theta,rho=rho,tau2=tau2,sig_star2=sig_star2)
+    thinned = GriddyPosteriors(theta=theta,rho=rho,sig2=sig2,sig_star2=sig_star2)
     
     return thinned
 end
@@ -284,28 +284,28 @@ Details
 This function selects retains every `nthin`th sample from the posterior samples, starting at the first index and going through to the end.
 """
 function thin_samples(samples::GriddyVarsStruct,nthin::Int)
-    if nthin >= length(samples.tau2)
+    if nthin >= length(samples.sig2)
         error("The number of specified to burn is greater than or equal to the total number of samples.
         Please specify a number of samples to burn that is less than the total number of samples.
-        Total number of samples = $(length(samples.tau2))
+        Total number of samples = $(length(samples.sig2))
         Specified thinning = $nthin")
     end
 
-    retained = 1:nthin:length(samples.tau2)
+    retained = 1:nthin:length(samples.sig2)
     if length(retained) < 100
         @warn "The specified thinning rate, $nthin, seems large for the number of posterior samples.
-        Total number of samples =  $(length(samples.tau2))
+        Total number of samples =  $(length(samples.sig2))
         Number of samples retained = $(length(retained))
-        Number of samples discarded = $(length(samples.tau2) - length(retained))
+        Number of samples discarded = $(length(samples.sig2) - length(retained))
         Consider using a smaller thinning rate or drawing more posterior samples."
     end
 
     theta = samples.theta[retained]
     rho = samples.rho[retained]
-    tau2 = samples.tau2[retained]
+    sig2 = samples.sig2[retained]
     sig_star2 = samples.sig_star2[retained]
     
-    thinned = GriddyVarsStruct(theta=theta,rho=rho,tau2=tau2,sig_star2=sig_star2)
+    thinned = GriddyVarsStruct(theta=theta,rho=rho,sig2=sig2,sig_star2=sig_star2)
     
     return thinned
 end
@@ -320,8 +320,8 @@ Keyword arguments
 * `samples::BulkVarsStruct` Posterior samples from the continuous sampler.
 """
 function sqrt_variance!(samples::BulkVarsStruct)
-    samples.tau2 .= sqrt.(samples.tau2)
     samples.sig2 .= sqrt.(samples.sig2)
+    samples.tau2 .= sqrt.(samples.tau2)
 end
 
 """
@@ -334,7 +334,7 @@ Keyword arguments
 * `samples::GriddyPosteriors` Posterior samples from the griddy Gibbs sampler.
 """
 function sqrt_variance!(samples::GriddyPosteriors)
-    samples.tau2 .= sqrt.(samples.tau2)
+    samples.sig2 .= sqrt.(samples.sig2)
     samples.sig_star2 .= sqrt.(samples.sig_star2)
 end
 
@@ -550,7 +550,7 @@ function plot_prediction!(samples::BulkVarsStruct,data::DataStr,
     mean_eta = vec(mean(response,dims=1))
     eta_bounds = Array{Float64}(undef,2,size(response)[2])
     delta_bounds = similar(eta_bounds)
-    tau_bound = quantile(samples.tau2,[0.975])[1]
+    tau_bound = quantile(samples.sig2,[0.975])[1]
     epsilon_bounds = quantile(Normal(0,tau_bound),[0.025,0.975])
     for i in axes(response)[2]
         eta_bounds[:,i] = quantile(response[:,i],[0.025,0.975])
@@ -631,7 +631,7 @@ function plot_prediction!(theta_idx::Vector{Int},samples::GriddyPosteriors,
     for i in axes(error_samples)[1]
         rho_vec = repeat([samples.rho[i]],nx)
         corr = correlation_construct(rho_vec,data.exp.x,nx,nloc)
-        sigma .= samples.tau2[i] .* (identity) .+ samples.sig_star2[i] .*
+        sigma .= samples.sig2[i] .* (identity) .+ samples.sig_star2[i] .*
             corr
         error_samples[i,:] .= rand(MvNormal(sigma),1)
     end
@@ -711,7 +711,7 @@ function make_estimate_table(samples::BulkVarsStruct,nx::Int,ntheta::Int,mdl_apn
         for i in 1:nx
             estimates[:,i+1] = get_estimates(samples.rho[:,i])
         end
-        estimates[:,end-1] = get_estimates(samples.sig2)
+        estimates[:,end-1] = get_estimates(samples.tau2)
         var_labs_tex = vcat(["Value"],[LaTeXString("\$\\rho_{$i}\$") for i in 1:nx],
             [LaTeXString("\$\\theta_{$j}\$") for j in 1:ntheta],
             [LaTeXString("\$\\sigma\$"),LaTeXString("\$\\tau\$")])
@@ -728,7 +728,7 @@ function make_estimate_table(samples::BulkVarsStruct,nx::Int,ntheta::Int,mdl_apn
     for i in 1:ntheta
         estimates[:,i+nx+1] = get_estimates(samples.theta[:,i])
     end
-    estimates[:,end] = get_estimates(samples.tau2)
+    estimates[:,end] = get_estimates(samples.sig2)
     param_labs = ["95% Lower Bound","Median","Mean","95% Upper Bound"]
     
     estimates = string.(round.(estimates,digits=5))
@@ -775,7 +775,7 @@ function make_estimate_table(samples::GriddyPosteriors,nx::Int,ntheta::Int,mdl_a
     for i in 1:ntheta
         estimates[:,i+2] = get_estimates(samples.theta[:,i])
     end
-    estimates[:,end] = get_estimates(samples.tau2)
+    estimates[:,end] = get_estimates(samples.sig2)
     param_labs = ["95% Lower Bound","Median","Mean","95% Upper Bound"]
     
     estimates = string.(round.(estimates,digits=5))
@@ -821,10 +821,10 @@ function post_process(samples::BulkVarsStruct,data::DataStr,nx::Int,ntheta::Int,
     sqrt_variance!(scaled_samples)
 
     if make_plots
-        posterior_hist!(scaled_samples.tau2,nbins,"tau",0,save_plots,show_plots,mdl_apnd)
-        trace_plot!(scaled_samples.tau2,"tau",0,save_plots,show_plots,mdl_apnd)
-        posterior_hist!(scaled_samples.sig2,nbins,"sigma",0,save_plots,show_plots,mdl_apnd)
-        trace_plot!(scaled_samples.sig2,"sigma",0,save_plots,show_plots,mdl_apnd)
+        posterior_hist!(scaled_samples.sig2,nbins,"tau",0,save_plots,show_plots,mdl_apnd)
+        trace_plot!(scaled_samples.sig2,"tau",0,save_plots,show_plots,mdl_apnd)
+        posterior_hist!(scaled_samples.tau2,nbins,"sigma",0,save_plots,show_plots,mdl_apnd)
+        trace_plot!(scaled_samples.tau2,"sigma",0,save_plots,show_plots,mdl_apnd)
         #plot_correlation(samples.theta,"theta",save_plots,show_plots,mdl_apnd)
         for theta in 1:ntheta
             posterior_hist!(scaled_samples.theta[:,theta],nbins,"theta",
@@ -881,8 +881,8 @@ function post_process(samples::GriddyVarsStruct,data::DataStr,nx::Int,ntheta::In
     sqrt_variance!(scaled_samples)
 
     if make_plots
-        posterior_hist!(scaled_samples.tau2,nbins,"tau",0,save_plots,show_plots,mdl_apnd)
-        trace_plot!(scaled_samples.tau2,"tau",0,save_plots,show_plots,mdl_apnd)
+        posterior_hist!(scaled_samples.sig2,nbins,"tau",0,save_plots,show_plots,mdl_apnd)
+        trace_plot!(scaled_samples.sig2,"tau",0,save_plots,show_plots,mdl_apnd)
         posterior_hist!(scaled_samples.sig_star2,nbins,"sigma",0,save_plots,show_plots,mdl_apnd)
         trace_plot!(scaled_samples.sig_star2,"sigma",0,save_plots,show_plots,mdl_apnd)
         #plot_correlation(samples.theta,"theta",save_plots,show_plots,mdl_apnd)

@@ -22,15 +22,15 @@ function init_vars(data::DataStr,nmcmc::Int,
     nobs = size(data.exp.x)[1]
 
     theta = repeat(theta_init',nmcmc)
-    tau2 = repeat([0.5],nmcmc)
     sig2 = repeat([0.5],nmcmc)
+    tau2 = repeat([0.5],nmcmc)
     delta = repeat([0.0],nmcmc,nobs)
     eta = repeat([0.0],nmcmc,nobs)
     rho = repeat([0.001],nmcmc,nx)
     accept = repeat([0.0],nmcmc,nx+ntheta)
     ratio = repeat([0.0],nmcmc,nx+ntheta)
 
-    return BulkVarsStruct(theta=theta,tau2=tau2,sig2=sig2,
+    return BulkVarsStruct(theta=theta,sig2=sig2,tau2=tau2,
         delta=delta,eta=eta,rho=rho,accept=accept,
         ratio=ratio)
 end
@@ -52,10 +52,10 @@ Returns
 function init_vars(data::DataStr,nmcmc::Int)
 
     theta = repeat([1],nmcmc)
-    tau2 = repeat([0.5],nmcmc)
+    sig2 = repeat([0.5],nmcmc)
     sig_star2 = repeat([1],nmcmc)
     rho = repeat([1],nmcmc)
     
-    return GriddyVarsStruct(theta,tau2,sig_star2,rho)
+    return GriddyVarsStruct(theta,sig2,sig_star2,rho)
 end
 

@@ -19,11 +19,11 @@ ntrial = 500 #number of iterations of the stepsize algorithm
 
 #input prior distribution hyperparameters
 #data error
-alpha_tau2 = 0.00000001
-beta_tau2 = 0.00000001
-#discrepancy variance
 alpha_sig2 = 0.00000001
 beta_sig2 = 0.00000001
+#discrepancy variance
+alpha_tau2 = 0.00000001
+beta_tau2 = 0.00000001
 #discrepancy correlation
 a_rho = 1.0
 b_rho = 1.0

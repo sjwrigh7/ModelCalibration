@@ -3,36 +3,36 @@
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
 
 """
-    loglik_theta!(c_sse::Vector{Float64},tau2_inv::Float64,loglik_theta::Vector{Float64})
+    loglik_theta!(c_sse::Vector{Float64},sig2_inv::Float64,loglik_theta::Vector{Float64})
 Function to calculate the optimized log-likelihood for θ in the griddy Gibbs sampling method.
 
 ---
 Keyword arguments
 * `c_sse::Vector{Float64}` Correlation sum of of squared error. This is calculated by sum([y-μ]'Σ*^-1[y-μ]).
-* `tau2_inv::Float64` Date model error variance.
+* `sig2_inv::Float64` Date model error variance.
 * `loglik_theta::Vector{Float64}` Pre-allocated Vector to store the log likelihood values in.
 """
-function loglik_theta!(c_sse::Array{Float64},tau2_inv::Float64,loglik_arr::Array{Float64})
-    loglik_arr .= -0.5 .* tau2_inv .* c_sse
+function loglik_theta!(c_sse::Array{Float64},sig2_inv::Float64,loglik_arr::Array{Float64})
+    loglik_arr .= -0.5 .* sig2_inv .* c_sse
 end
 
-function loglik_theta(c_sse::Array{Float64},tau2_inv::Float64)
-    return -0.5 .* tau2_inv .* c_sse
+function loglik_theta(c_sse::Array{Float64},sig2_inv::Float64)
+    return -0.5 .* sig2_inv .* c_sse
 end
 
 """
-    loglik_covar!(c_sse::Array{Float64},log_det_sig::Array{Float64},tau2_inv::Float64,loglik_theta::Array{Float64})
+    loglik_covar!(c_sse::Array{Float64},log_det_sig::Array{Float64},sig2_inv::Float64,loglik_theta::Array{Float64})
 Function to calculate the optimized log-likelihood for Σ* in the griddy Gibbs sampling method.
 
 ---
 Keyword arguments
 * `c_sse::Array{Float64}` Correlation sum of of squared error. This is calculated by sum([y-μ]'Σ*^-1[y-μ]).
 * `log_det_sig::Array{Float64}` Determinant of Σ* raised to the power of (-m/2), where mis the number of observations.
-* `tau2_inv::Float64` Date model error variance.
+* `sig2_inv::Float64` Date model error variance.
 * `loglik_theta::Array{Float64}` Pre-allocated Vector to store the log likelihood values in.
 """
-function loglik_covar!(c_sse::Array{Float64},log_det_sig::Array{Float64},tau2_inv::Float64,loglik_covar::Array{Float64})
-    loglik_covar .= log_det_sig .+ (-0.5 .* tau2_inv .* c_sse)
+function loglik_covar!(c_sse::Array{Float64},log_det_sig::Array{Float64},sig2_inv::Float64,loglik_covar::Array{Float64})
+    loglik_covar .= log_det_sig .+ (-0.5 .* sig2_inv .* c_sse)
 end
 
 """

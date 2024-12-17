@@ -2,7 +2,7 @@
 ############################# Define Misc Functions ###############################
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
 """
-    setup(design::Array{Float64},simobs::Vector{Float64},expobs::Union{Array{Float64},Float64},nx::Int,ntheta::Int,alpha_tau2::Float64,beta_tau2::Float64,alpha_sig2::Float64,beta_sig2::Float64,a_rho::Float64,b_rho::Float64)
+    setup(design::Array{Float64},simobs::Vector{Float64},expobs::Union{Array{Float64},Float64},nx::Int,ntheta::Int,alpha_sig2::Float64,beta_sig2::Float64,alpha_tau2::Float64,beta_tau2::Float64,a_rho::Float64,b_rho::Float64)
 Function to perform necessary calculation prior to calibration.
 
 ---
@@ -12,10 +12,10 @@ Keyword arguments
 * `expobs::Union{Array{Float64},Float64}` Matrix of experimental data, of dimensions v and p+1. The first p columns correspond the control independent variables (x) and the last column corresponds to the observed response.
 * `nx::Int` The number of independent control variables (x) in the experimental and computer simulator data.
 * `ntheta::Int` The number of independent unknown variables (θ) in the computer simulator data.
-* `alpha_tau2::Float64` Inverse Gamma shape parameter for the data error variance prior (τ^2).
-* `beta_tau2::Float64` Inverse Gamma scale parameter for the data error variance prior (τ^2).
-* `alpha_sig2::Float64` Inverse Gamma shape parameter for the discrepancy vairiance prior (σ^2).
-* `beta_sig2::Float64` Inverse Gamma scale parameter for the discrepancy variance prior (σ^2).
+* `alpha_sig2::Float64` Inverse Gamma shape parameter for the data error variance prior (τ^2).
+* `beta_sig2::Float64` Inverse Gamma scale parameter for the data error variance prior (τ^2).
+* `alpha_tau2::Float64` Inverse Gamma shape parameter for the discrepancy vairiance prior (σ^2).
+* `beta_tau2::Float64` Inverse Gamma scale parameter for the discrepancy variance prior (σ^2).
 * `a_rho::Float64` Beta shape parameter 1 for the discrepancy correlation prior (ρ).
 * `b_rho::Float64` Beta shape parameter 2 for the discrepancy correlation prior (ρ).
 
@@ -30,8 +30,8 @@ Returns
 """
 function setup(design_raw::Array{Float64},simobs_raw::Vector{Float64},
     expobs_raw::Union{Array{Float64},Float64},nx::Int,ntheta::Int,
-    alpha_tau2::Float64,beta_tau2::Float64,alpha_sig2::Float64,
-    beta_sig2::Float64,a_rho::Float64,b_rho::Float64)
+    alpha_sig2::Float64,beta_sig2::Float64,alpha_tau2::Float64,
+    beta_tau2::Float64,a_rho::Float64,b_rho::Float64)
     if length(size(expobs_raw)) == 0                                   # ensure data is formatted as an array (in the case of univarite normal distribution data)
         expobs_raw = [expobs_raw]
     end
@@ -91,8 +91,8 @@ function setup(design_raw::Array{Float64},simobs_raw::Vector{Float64},
     # format Data
     data = format_data(design_norm,simobs_norm,expobs_norm,nx)
 
-    priors = format_prior_hyperparameters(data,alpha_tau2,
-    beta_tau2,alpha_sig2,beta_sig2,
+    priors = format_prior_hyperparameters(data,alpha_sig2,
+    beta_sig2,alpha_tau2,beta_tau2,
     a_rho,b_rho,nx,ntheta)
 
     if data.exp.x != data.sim.x
@@ -343,16 +343,16 @@ function format_data(design::Array{Float64},simobs::Vector{Float64},
 end
 
 """
-    format_prior_hyperparameters(data::DataStr,alpha_tau2::Float64,beta_tau2::Float64,alpha_sig2::Float64,beta_sig2::Float64,a_rho::Float64,b_rho::Float64,nx::Int64,ntheta::Int64)
+    format_prior_hyperparameters(data::DataStr,alpha_sig2::Float64,beta_sig2::Float64,alpha_tau2::Float64,beta_tau2::Float64,a_rho::Float64,b_rho::Float64,nx::Int64,ntheta::Int64)
 Funtion to initialize the specified prior distribution hyperparameters into the requisatory struct.
 
 ---
 Keyword arguments
 * `data::DataStr` Struct containing the computer simulator and experimental data.
-* `alpha_tau2::Float64` Inverse Gamma shape parameter for the data error variance prior (τ^2).
-* `beta_tau2::Float64` Inverse Gamma scale parameter for the data error variance prior (τ^2).
-* `alpha_sig2::Float64` Inverse Gamma shape parameter for the discrepancy vairiance prior (σ^2).
-* `beta_sig2::Float64` Inverse Gamma scale parameter for the discrepancy variance prior (σ^2).
+* `alpha_sig2::Float64` Inverse Gamma shape parameter for the data error variance prior (τ^2).
+* `beta_sig2::Float64` Inverse Gamma scale parameter for the data error variance prior (τ^2).
+* `alpha_tau2::Float64` Inverse Gamma shape parameter for the discrepancy vairiance prior (σ^2).
+* `beta_tau2::Float64` Inverse Gamma scale parameter for the discrepancy variance prior (σ^2).
 * `a_rho::Float64` Beta shape parameter 1 for the discrepancy correlation prior (ρ).
 * `b_rho::Float64` Beta shape parameter 2 for the discrepancy correlation prior (ρ).
 * `nx::Int` Integer specifying the number of independent control variables (x).
@@ -370,8 +370,8 @@ This function is agnostic to what prior distributions are used for the model but
 * σ^2 ∼ IG(α,β)
 * ρ ∼ Beta(a,b)
 """
-function format_prior_hyperparameters(data::DataStr,alpha_tau2::Float64,
-    beta_tau2::Float64,alpha_sig2::Float64,beta_sig2::Float64,a_rho::Float64,
+function format_prior_hyperparameters(data::DataStr,alpha_sig2::Float64,
+    beta_sig2::Float64,alpha_tau2::Float64,beta_tau2::Float64,a_rho::Float64,
     b_rho::Float64,nx::Int,ntheta::Int)
     theta = data.sim.theta                    #pull theta
     
@@ -382,9 +382,9 @@ function format_prior_hyperparameters(data::DataStr,alpha_tau2::Float64,
     b_rho = repeat([b_rho],nx)
     
     theta = PriorVar(theta_lower,theta_upper) #store in structs
-    tau2 = PriorVar(alpha_tau2,beta_tau2)
     sig2 = PriorVar(alpha_sig2,beta_sig2)
+    tau2 = PriorVar(alpha_tau2,beta_tau2)
     rho = PriorVar(a_rho,b_rho)
-    priors = PriorData(theta=theta,tau2=tau2,sig2=sig2,rho=rho)
+    priors = PriorData(theta=theta,sig2=sig2,tau2=tau2,rho=rho)
     return priors
 end

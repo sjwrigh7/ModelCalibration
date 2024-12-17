@@ -23,7 +23,7 @@ function griddy_gibbs!(data::DataStr,sample_vals::GriddyVarsStruct,c_sse::Array{
     rho = 1
     sig_star2 = 1
     theta = 1
-    tau2 = 0.1
+    sig2 = 0.1
 
 
     loglik_theta = similar(c_sse[:,rho,sig_star2])
@@ -48,10 +48,10 @@ function griddy_gibbs!(data::DataStr,sample_vals::GriddyVarsStruct,c_sse::Array{
     @inbounds @showprogress 1 "Sampling..." for i in 2:nmcmc
         
         #presolve for the inverse of τ^2 so it only needs to be done once per iteration
-        tau2_inv = 1/tau2
+        sig2_inv = 1/sig2
 
         #calculate the log-likelihood of θ and store in pre-allocated arrays
-        loglik_theta!(c_sse[:,rho,sig_star2],tau2_inv,loglik_theta)
+        loglik_theta!(c_sse[:,rho,sig_star2],sig2_inv,loglik_theta)
         
         #calculate proportional posterior of θ
         #this calculation would go on this line a non-uniform prior is specified
@@ -64,7 +64,7 @@ function griddy_gibbs!(data::DataStr,sample_vals::GriddyVarsStruct,c_sse::Array{
         sample_vals.theta[i] = theta
 
         #calculate log-likelihood for the entire covariance matrix and store into pre-allocated arrays
-        loglik_covar!(c_sse[theta,:,:],log_det_sig,tau2_inv,loglik_covar)
+        loglik_covar!(c_sse[theta,:,:],log_det_sig,sig2_inv,loglik_covar)
         
         #calculate proportional posterior of ρ
         #this calculation would go on this line a non-uniform prior is specified
@@ -76,17 +76,17 @@ function griddy_gibbs!(data::DataStr,sample_vals::GriddyVarsStruct,c_sse::Array{
 
         #calculate proportional posterior of σ*^2
         sig_post .= loglik_covar[rho,:] .+ logpdf(InverseGamma(
-            priors.sig2.par1,priors.sig2.par2),sig_design[rho,sig_star2,2])
+            priors.tau2.par1,priors.tau2.par2),sig_design[rho,sig_star2,2])
 
         #sample σ*^2 using full conditional with likelihood Array over σ*^2 dimension
         sig_star2 = griddy_sample!(sig_post,stable_sig,norm_sig,cumsum_sig)
         sample_vals.sig_star2[i] = sig_star2
 
         #sample τ^2 using semi-conjugate posterior distributions
-        tau2 = rand(InverseGamma(priors.tau2.par1+n_loc*n_rep/2,
-        priors.tau2.par2 + 0.5*c_sse[theta,rho,sig_star2]))
+        sig2 = rand(InverseGamma(priors.sig2.par1+n_loc*n_rep/2,
+        priors.sig2.par2 + 0.5*c_sse[theta,rho,sig_star2]))
 
-        sample_vals.tau2[i] = tau2
+        sample_vals.sig2[i] = sig2
         
     end
     
@@ -99,7 +99,7 @@ function griddy_gibbs!(data::DataStr,sample_vals::GriddyVarsStruct,c_sse::Vector
     n_rep = size(data.exp.y)[2]
 
     theta = 1
-    tau2 = 0.1
+    sig2 = 0.1
 
 
     loglik_theta = similar(c_sse)
@@ -111,10 +111,10 @@ function griddy_gibbs!(data::DataStr,sample_vals::GriddyVarsStruct,c_sse::Vector
     @inbounds @showprogress 1 "Sampling..." for i in 2:nmcmc
         
         #presolve for the inverse of τ^2 so it only needs to be done once per iteration
-        tau2_inv = 1/tau2
+        sig2_inv = 1/sig2
 
         #calculate the log-likelihood of θ and store in pre-allocated arrays
-        loglik_theta!(c_sse[:,rho,sig_star2],tau2_inv,loglik_theta)
+        loglik_theta!(c_sse[:,rho,sig_star2],sig2_inv,loglik_theta)
         
         #calculate proportional posterior of θ
         #this calculation would go on this line a non-uniform prior is specified
@@ -127,10 +127,10 @@ function griddy_gibbs!(data::DataStr,sample_vals::GriddyVarsStruct,c_sse::Vector
         sample_vals.theta[i] = theta
 
         #sample τ^2 using semi-conjugate posterior distributions
-        tau2 = rand(InverseGamma(priors.tau2.par1+n_loc*n_rep/2,
-        priors.tau2.par2 + 0.5*c_sse[theta]))
+        sig2 = rand(InverseGamma(priors.sig2.par1+n_loc*n_rep/2,
+        priors.sig2.par2 + 0.5*c_sse[theta]))
 
-        sample_vals.tau2[i] = tau2
+        sample_vals.sig2[i] = sig2
         
     end
     

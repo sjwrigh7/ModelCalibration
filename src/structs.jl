@@ -148,32 +148,32 @@ Keyword arguments
 end
 
 """
-    PriorData(theta::PriorVar,tau2::PriorVar,sig2::PriorVar,rho::PriorVar)
+    PriorData(theta::PriorVar,sig2::PriorVar,tau2::PriorVar,rho::PriorVar)
 Structure containing the `PriorVar` prior distribution parameters for all parameters in the Bayesian calibration model.
 
 ---
 Keyword arguments
 * `theta::PriorVar` Prior distribution parameters for the unknown model parameters, θ. The two prior parameters are m length Vectors containing minimum and maximum values corresponding to a uniform prior distribution for each of the m θ variables, respectively.
-* `tau2::PriorVar` Prior distribution parameters for the data error variance. The two prior parameters are the shapre (α) and scale (β) of an inverse gamma distribution, respectively.
-* `sig2::PriorVar` Prior distribution parameters for the discrepancy term variance. The two prior parameters are the shapre (α) and scale (β) of an inverse gamma distribution, respectively.
+* `sig2::PriorVar` Prior distribution parameters for the data error variance. The two prior parameters are the shapre (α) and scale (β) of an inverse gamma distribution, respectively.
+* `tau2::PriorVar` Prior distribution parameters for the discrepancy term variance. The two prior parameters are the shapre (α) and scale (β) of an inverse gamma distribution, respectively.
 * `rho::PriorVar` Prior distribution parameters for the discrepancy term correlation structure. The two parameters are p length Vectors containing the α and β parameters for a Beta distribution for each of the p x variables, respectively.
 """
 @with_kw struct PriorData
     theta::PriorVar
-    tau2::PriorVar
     sig2::PriorVar
+    tau2::PriorVar
     rho::PriorVar
 end
 
 """
-    BulkVarsStruct(theta::Array{Float64},tau2::Vector{Float64},sig2::Vector{Float64},delta::Array{Float64},rho::Array{Float64},accept::Array{Bool},ratio::Array{Float64})
+    BulkVarsStruct(theta::Array{Float64},sig2::Vector{Float64},tau2::Vector{Float64},delta::Array{Float64},rho::Array{Float64},accept::Array{Bool},ratio::Array{Float64})
 Data structure containing the samples and Metropolis-Hastings information from the Markov Chain Monte Carlo simulation sampling of the posterior distribution in the Bayesian model calibration.
 
 ---
 Keyword arguments
 * `theta::Array{Float64}` An Array to store the samples of θ during the MCMC simulation, dimensions n and m.
-* `tau2::Vector{Float64}` A Vector to store the samples of τ^2 during the MCMC simulation, length n.
-* `sig2::Vector{Float64}` A Vector to store the samples of σ^2 during the MCMC simulation, length n.
+* `sig2::Vector{Float64}` A Vector to store the samples of τ^2 during the MCMC simulation, length n.
+* `tau2::Vector{Float64}` A Vector to store the samples of σ^2 during the MCMC simulation, length n.
 * `delta::Array{Float64}` An Array to store the samples of δ during the MCMC simulation, dimensions n and q.
 * `rho::Array{Float64}` An Array to store the samples of ρ during the MCMC simulation, dimensions n and p.
 * `accept::Array{Bool}` An Array to store the acceptance status of each Metropolis-Hastings update during the MCMC, dimensions n and p+m.
@@ -181,8 +181,8 @@ Keyword arguments
 """
 @with_kw mutable struct BulkVarsStruct
     theta::Array{Float64}
-    tau2::Vector{Float64}
     sig2::Vector{Float64}
+    tau2::Vector{Float64}
     delta::Array{Float64}
     eta::Array{Float64}
     rho::Array{Float64}
@@ -191,58 +191,58 @@ Keyword arguments
 end
 
 """
-    GriddyVarsStruct(theta::Vector{Int},tau2::Vector{Float64},sig_star2::Vector{Float64},rho::Vector{Float64})
+    GriddyVarsStruct(theta::Vector{Int},sig2::Vector{Float64},sig_star2::Vector{Float64},rho::Vector{Float64})
 Data structure containing posterior index samples for the griddy Gibbs sampler.
 
 ---
 Keyword arguments
 * `theta::Vector{Int}` A Vector to store the index of the values of θ during the MCMC simulation, length n.
-* `tau2::Vector{Float64}` A Vector to store the samples of τ^2 during the MCMC simulation, length n.
+* `sig2::Vector{Float64}` A Vector to store the samples of τ^2 during the MCMC simulation, length n.
 * `sig_star2::Vector{Int}` A Vector to store the samples of σ*^2 during the MCMC simulation, length n.
 * `rho::Vector{Int}` A Vector to store the samples of ρ during the MCMC simulation, length n.
 """
 @with_kw mutable struct GriddyVarsStruct
     theta::Vector{Int}
-    tau2::Vector{Float64}
+    sig2::Vector{Float64}
     sig_star2::Vector{Int}
     rho::Vector{Int}
 end
 
 """
-    GriddyPosteriors(theta::Array{Float64},tau2::Vector{Float64},sig_star2::Vector{Float64},rho::Vector{Float64})
+    GriddyPosteriors(theta::Array{Float64},sig2::Vector{Float64},sig_star2::Vector{Float64},rho::Vector{Float64})
 Struct to store the posterior samples from the griddy Gibbs sampler, converted from the posterior indices.
 
 ---
 Keyword arguments
 * `theta::Array{Float64}` Array of unknown computer model parameter samples.
-* `tau2::Vector{Float64}` Vector of data model variance parameter samples.
+* `sig2::Vector{Float64}` Vector of data model variance parameter samples.
 * `sig_star2::Vector{Float64}` Vector of discrepancy variance parameter samples.
 * `rho::Vector{Float64}` Vector of discrepancy correlation parameter samples.
 """
 @with_kw mutable struct GriddyPosteriors
     theta::Array{Float64}
-    tau2::Vector{Float64}
+    sig2::Vector{Float64}
     sig_star2::Vector{Float64}
     rho::Vector{Float64}
 end
 
 """
-    UpdatedVars(theta::Vector{Float64},delta::Vector{Float64},tau2::Float64,sig2::Float64,rho::Vector{Float64})
+    UpdatedVars(theta::Vector{Float64},delta::Vector{Float64},sig2::Float64,tau2::Float64,rho::Vector{Float64})
 Data structure containing the most recently sampled values for each parameter during the Markov Chain Monte Carlo simulation sampling of the posterior distribution in the Bayesian model calibration.
 
 ---
 Keyword arguments
 * `theta::Vector{Float64}` A Vector of length m containing the most recently sampled values of each of the m θ parameters.
 * `delta::Vector{Float64}` A Vector of length q containing the most recently sampled values of δ.
-* `tau2::Float64` The most recently sampled value of τ^2.
-* `sig2::Float64` The most recently sampled value of σ^2.
+* `sig2::Float64` The most recently sampled value of τ^2.
+* `tau2::Float64` The most recently sampled value of σ^2.
 * `rho::Vector{Float64}` A Vector of length p containing the most recently sampled values of each of the p ρ parameters.
 """
 @with_kw mutable struct UpdatedVars
     theta::Vector{Float64}
     delta::Vector{Float64}
-    tau2::Float64
     sig2::Float64
+    tau2::Float64
     rho::Vector{Float64}
 end
 
@@ -261,17 +261,17 @@ Keyword arguments
 end
 
 """
-    CovarPars(ta2::Float64,rho::Float64,tau2::Float64)
+    CovarPars(ta2::Float64,rho::Float64,sig2::Float64)
 Struct to store mutable params for covar construction.
 
 ---
 Keyword arguments
-* `tau2::Float64` Variance parameter for identity portion of covaraince.
+* `sig2::Float64` Variance parameter for identity portion of covaraince.
 * `rho::Float64` Correlation parameter.
-* `sig2::Float64` Variance parameter for correlation portion of covariance.
+* `tau2::Float64` Variance parameter for correlation portion of covariance.
 """
 @with_kw mutable struct CovarPars
-    tau2::Float64
-    rho::Float64
     sig2::Float64
+    rho::Float64
+    tau2::Float64
 end
