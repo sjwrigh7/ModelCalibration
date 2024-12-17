@@ -6,7 +6,7 @@
 Function to adjust a given stepsize based on the difference between its calculated acceptance rate and the target.
 
 ---
-Keyword arguments
+Positional arguments
 * `diff::Float64` The difference between the calculated acceptance ratio and the target.
 * `scale::Float64` Scaling factor for the equation.
 * `shape::Float64` Shape parameter for the equation.
@@ -28,29 +28,29 @@ The exponentiation of this value is returned
 """
 function stepsize_adjust(diff::Float64,scale::Float64,shape::Float64,offset::Float64)
     logscale = scale * atan(shape*diff)
-    #println(logscale)
     logscale = logscale + offset*sign(logscale) - offset
-    #println(logscale)
     factor = exp(logscale)
-    #println("diff = $diff")
-    #println("factor = $factor")
     return factor
 end
 
 """
-    update_stepsize!(acceptance::Array{Bool},old_stepsize::StepSize,nx::Int,ntheta::Int,target::Tuple{Float64},eta::Float64,factor::Float64,offset::Float64)
+    update_stepsize!(acceptance::Vector{Float64},stepsize::StepSize,history::Array{Float64},
+    nx::Int,ntheta::Int,target::Vector{Float64},scale::Float64,shape::Float64,offset::Float64,
+    weight::Float64)
 Function to update the Metropolis-Hastings algorithm step sizes based on the calculated acceptance ratios compared to their target values.
 
 ---
-Keyword arguments
-* `acceptance::Array{Bool}` Array containing the acceptance value for each M-H update.
-* `old_stepsize::StepSize` Struct containing the step sizes used during the M-H updates for θ and ρ.
+Positional arguments
+* `acceptance::Vector{Float64}` Array containing the acceptance value for each M-H update.
+* `stepsize::StepSize` Struct containing the step sizes used during the M-H updates for θ and ρ.
+* `history::Array{Float64}` History of previous step sizes.
 * `ntheta::Int` The number of θ variables using M-H updates.
 * `nx::Int` The number of ρ variables using M-H updates.
-* `target::Tuple{Float64}` A length 2 Tuple containing the target acceptance rates for θ and ρ, respectively.
+* `target::Vector{Float64}` A length 2 Tuple containing the target acceptance rates for θ and ρ, respectively.
 * `scale::Float64` Scaling parameter to pass into the `stepsize_adjust` function.
 * `shape::Float64` Shape parameter to pass into the `stepsize_adjust` function.
 * `offset::Float64` Offset parameter to pass into the `stepsize_adjust` function.
+* `weight::Float64` weight to use for the weighted average.
 """
 function update_stepsize!(acceptance::Vector{Float64},stepsize::StepSize,
     history::Array{Float64},nx::Int,ntheta::Int,target::Vector{Float64},
@@ -66,31 +66,36 @@ function update_stepsize!(acceptance::Vector{Float64},stepsize::StepSize,
             history[end,i+nx],weight)
         stepsize.theta[i] = weighted_avg(repeat([stepsize.theta[i]],
         size(history)[1]),stepsize.theta[i]*adjustment,weight)
-        #println("theta diff = $diff")
-        #println("theta adjustment = $adjustment")
+
     end
 
     @inbounds for i in 1:nx
         rate = acceptance[i]
 
         diff = rate - target[2]
-        #println("rho $i old stepsize = $(stepsize.rho[i])")
+
         adjustment = stepsize_adjust(diff,scale,shape,offset)
         stepsize.rho[i] = weighted_avg(history[1:(end-1),i],
             history[end,i],weight)
         stepsize.rho[i] = weighted_avg(repeat([stepsize.rho[i]],
         size(history)[1]),stepsize.rho[i]*adjustment,weight)
         
-        #println("rho $i acceptance = $rate")
-        #println("rho $i difference = $diff")
-        #println("rho $i adjustment = $adjustment")
-        #println("rho $i proposed stepsize = $(stepsize.rho[i])")
     end
 
     return stepsize
 end
 
 """
+    weighted_avg(values::Vector{Float64},new::Float64,weight::Float64)
+Function to calculate the weighted average of a set of data.
+Implementation for weighted average of step size values.
+This function assumes a weight of unity for the old values in `values` and uses `weight` for `new`
+
+---
+Positional arguments
+* `values::Vector{Float64}` Old values for the average.
+* `new::Float64` New value added to the average.
+* `weight::Float64` weight for the new value.
 """
 function weighted_avg(values::Vector{Float64},new::Float64,weight::Float64)
     n = sum(values) + weight*new
@@ -100,6 +105,16 @@ function weighted_avg(values::Vector{Float64},new::Float64,weight::Float64)
 end
 
 """
+    weighted_avg(Values::Vector{Bool},new::Vector{Bool},weight::Float64)
+Function to calculate the weighted average of a set of data.
+Implementation for weighted average of acceptance values.
+This function assumes a weight of unity for the old values in `values` and uses `weight` for `new`
+
+---
+Positional arguments
+* `values::Vector{Bool}` Old acceptance values.
+* `new::Vector{Bool}` New acceptance values.
+* `weight::Float64` weight for the new values.
 """
 function weighted_avg(values::Vector{Bool},new::Vector{Bool},weight::Float64)
     n = sum(values) + weight*sum(new)
@@ -107,31 +122,29 @@ function weighted_avg(values::Vector{Bool},new::Vector{Bool},weight::Float64)
     avg = n/d
     return avg
 end
+
 """
-    auto_stepsize(data::DataStr,nruns::Int,prior_data::PriorData,nsize::Int,nx::Int,ntheta::Int,nobs::Int,theta_init::Vector{Float64})
-    auto_stepsize(data::DataStr,nruns::Int,prior_data::PriorData,nsize::Int,nx::Int,ntheta::Int,nobs::Int,theta_init::Vector{Float64},init::Float64,target::Tuple{Float64},eta::Float64,factor::Float64,offset::Float64)
+    auto_stepsize(model,data::DataStr,nbatch::Int,batchsize::Int,prior_data::PriorData,
+    nx::Int,ntheta::Int,nobs::Int,theta_init::Vector{Float64},
+    init::Float64,target::Tuple{Float64},eta::Float64,factor::Float64,offset::Float64)
 Function to calculate the appropriate step size for the Metropolis-Hastings algorithm, for a target acceptance ratio.
 
 ---
-Keyword arguments
+Positional arguments
+* `model` Surrogate model.
 * `data::DataStr` Struct containing the computer simulator and experimental data.
 * `nbatch::Int` The number of batches of MCMC simulations to run.
 * `batchsize::Int` The number of MCMC iterations ro run per batch.
+* `prior_data::PriorData` Struct containing information on the variables' prior distributions.
 * `nx::Int` The number of x dimensions.
 * `ntheta::Int` The number of θ dimensions.
-* `nobs::Int` The number of unique settings of x in the experimental data.
+* `nloc::Int` The number of unique settings of x in the experimental data.
 * `theta_init::Vector{Float64}` The settings of θ at which to initialize the MCMC.
-Optional arguments
 * `init::Float64` The inital step size for the start of this algorithm.
-  * By default, 1E-3 is used.
 * `target::Tuple{Float64}` A length 2 Tuple containing the target acceptance rates for θ and ρ, respectively.
-  * By defualt, 0.3 is used for both.
 * `scale::Float64` Scaling parameter to pass into the `stepsize_adjust` function.
-  * By default, 2.0 is used.
 * `shape::Float64` Shape parameter to pass into the `stepsize_adjust` function.
-  * By defualt, 30.0 is used.
 * `offset::Float64` Offset parameter to pass into the `stepsize_adjust` function.
-  * By default, 1.5 is used.
 ---
 Returns
 * `stepsize::StepSize` Struct containing the calculated stepsizes that will result in the target acceptance rate.
@@ -160,9 +173,6 @@ function auto_stepsize(model,data::DataStr,nbatch::Int,batchsize::Int,prior_data
     acceptance_hist = Array{Float64}(undef,nbatch,nx+ntheta)
 
     @inbounds @showprogress 1 "Computing Stepsize..." for i in 1:nbatch
-        #println(i)
-        #println(i==1)
-        #println(ifelse(i==1,1,0))
         weight = sqrt(i)
         start = (i-1)*batchsize + 1 + ifelse(i==1,1,0)
         stop = i*batchsize
@@ -171,9 +181,7 @@ function auto_stepsize(model,data::DataStr,nbatch::Int,batchsize::Int,prior_data
             stepsize,nx,ntheta,nloc)
         
         @inbounds for j in 1:nx
-            #println("rho $j actual acceptance = $(mean(mcmc_vars.accept[start:stop,j]))")
             stepsize_hist[i,j] = stepsize.rho[j]
-            #println("rate_2 = $(mean(mcmc_vars.accept[start:stop,j]))")
             acceptance_hist[i,j] = weighted_avg(mcmc_vars.accept[1:(start-1),
             j],mcmc_vars.accept[start:stop,j],weight)
         end
@@ -192,12 +200,13 @@ function auto_stepsize(model,data::DataStr,nbatch::Int,batchsize::Int,prior_data
 end
 
 """
+**Deprecated**
     stepsize_gd(data::DataStr,nbatch::Int,nsize::Int,prior_data::PriorData,nx::Int,ntheta::Int,nobs::Int,theta_init::Vector{Float64})
     stepsize_gd(data::DataStr,nbatch::Int,nsize::Int,prior_data::PriorData,nx::Int,ntheta::Int,nobs::Int,theta_init::Vector{Float64},init::Float64,target::Tuple{Float64},eta::Float64)
 Function to optimize the M-H step size via gradient descent.
 
 ---
-Keyword arguments
+Positional arguments
 * `data::DataStr` Struct containing the computer simulator and experimental data.
 * `nbatch::Int` The number of batches of MCMC simulations to run.
 * `batchsize::Int` The number of MCMC iterations ro run per batch.
@@ -266,20 +275,22 @@ function stepsize_gd(model,data::DataStr,nbatch::Int,batchsize::Int,prior_data::
 end
 
 """
-    plot_stepsize_opt(stepsize::Array{Float64},acceptance::Array{Float64},nx::Int,ntheta::Int,show::Bool,save::Bool)
+    plot_stepsize_opt(stepsize::Array{Float64},acceptance::Array{Float64},nx::Int,
+    ntheta::Int,show_plots::Bool,save_plots::Bool,mdl_apnd::String)
 Function to plot the results of the M-H stepsize optimization algorithm.
 
 ---
-Keyword arguments
+Positional arguments
 * `stepsize::Array{Float64}` A n by `nx`+`ntheta` Array containing the M-H step sizes used in the stepsize optimization algorithm.
 * `acceptance::Array{Float64}` A n by `nx`+`ntheta` Array containing the calculated M-H acceptance rates corresponding to `stepsize`.
 * `nx::Int` The number of x dimesions.
 * `ntheta::Int` The number of θ dimensions.
-* `save::Bool` An indication of whether the plots should be saved.
-* `show::Bool` An indication of whether the plots should be displayed.
+* `show_plots::Bool` An indication of whether the plots should be saved.
+* `save_plots::Bool` An indication of whether the plots should be displayed.
+* `mdl_apnd::String` String to append to the front of the plots' file names.
 """
 function plot_stepsize_opt(stepsize::Array{Float64},acceptance::Array{Float64},
-    nx::Int,ntheta::Int,show_plots::Bool,save_plots::Bool,mdl_apnd::String)
+            nx::Int,ntheta::Int,show_plots::Bool,save_plots::Bool,mdl_apnd::String)
     function plot_stepsize(epochs::Int,stepsize::Vector{Float64},var::String,iter::Int)
         p = Plots.plot(1:epochs,stepsize,label=false,top_margin=5mm,left_margin=5mm,
             titlelocation=[0.5,1.05])
@@ -353,7 +364,7 @@ end
 Function to assess the convergence of the M-H stepsize optimization results.
 
 ---
-Keyword arguments
+Positional arguments
 * `stepsize::Array{Float64}` A n by `nx`+`ntheta` Array containing the M-H step sizes used in the stepsize optimization algorithm.
 * `acceptance::Array{Float64}` A n by `nx`+`ntheta` Array containing the calculated M-H acceptance rates corresponding to `stepsize`.
 * `nx::Int` The number of x dimesions.
@@ -369,7 +380,7 @@ Details
 This function calculates the slope of the secant line between each element of the `acceptance` and `stepsize` Arrays relative to the last element.
 """
 function assess_convergence(stepsize::Array{Float64},acceptance::Array{Float64},
-    nx::Int,ntheta::Int)
+            nx::Int,ntheta::Int)
 
     epochs = size(acceptance)[1]
     breaks = collect(1:epochs)
@@ -401,47 +412,54 @@ function assess_convergence(stepsize::Array{Float64},acceptance::Array{Float64},
 end
 
 """
-    find_stepsize(data::DataStr,nbatch::Int,batchsize::Int,prior_data::PriorData,nx::Int,ntheta::Int,nobs::Int,theta_init::Vector{Float64},method::Int,make_plots::Bool,show_plots::Bool,save_plots::Bool)
-    find_stepsize(data::DataStr,nbatch::Int,batchsize::Int,prior_data::PriorData,nx::Int,ntheta::Int,nobs::Int,theta_init::Vector{Float64},method::Int,make_plots::Bool,show_plots::Bool,save_plots::Bool,init::Float64,target::Tuple{Float64},scale::Float64,shape::Float64,offset::Float64)
+    find_stepsize(model,data::DataStr,nbatch::Int,batchsize::Int,prior_data::PriorData,
+    nx::Int,ntheta::Int,nloc::Int)
+    find_stepsize(model,data::DataStr,nbatch::Int,batchsize::Int,prior_data::PriorData,
+    nx::Int,ntheta::Int,nloc::Int;theta_init::Vector{Float64},method::Int,make_plots::Bool,
+    show_plots::Bool,save_plots::Bool,init::Float64,target::Tuple{Float64},scale::Float64,
+    shape::Float64,offset::Float64,mdl_apnd::String)
 Function to solve for the appropriate step size for θ and ρ in the Metropolis-Hastings algorithm for Bayesian calibration.
 
 ---
 Keyword arguments
+* `model` Surrogate model
 * `data::DataStr` Struct containing the computer simulator and experimental data.
 * `nbatch::Int` The number of batches of MCMC simulations to run.
 * `batchsize::Int` The number of MCMC iterations ro run per batch.
+* `prior_data` Struct containing parameter prior distribution informaiton.
 * `nx::Int` The number of x dimensions.
 * `ntheta::Int` The number of θ dimensions.
-* `nobs::Int` The number of unique settings of x in the experimental data.
-* `theta_init::Vector{Float64}` The settings of θ at which to initialize the MCMC.
-* `method::Int` Indicator of which method to use. Below are the available options
-  * 1 -> `auto_stepsize` a function using automatic adjustment of averaged stepsizes.
-  * 2 -> `stepsize_gd` a function that performs gradient descent optimization on the stepsizes.
+* `nloc::Int` The number of unique settings of x in the experimental data.
+
+Keyword arguments
+* `theta_init::Union{Vector{Float64},Float64}` The settings of θ at which to initialize the MCMC.
+  * default value of 0.5 is used for each dimension of theta if not specified.
 * `make_plots::Bool` Indicator of whether to generate plots from the results of the algorithm.
+  * default value of true
 * `show_plots::Bool` Indicator of whether to display the plots generated.
+  * default value of true
 * `save_plots::Bool` Indicator of whether to save the plots generated.
-Optional arguments
+  * default value of true
 * `init::Float64` The inital step size for the start of this algorithm.
   * By default, 1E-3 is used.
-* `target::Tuple{Float64}` A length 2 Tuple containing the target acceptance rates for θ and ρ, respectively.
+* `target::Vector{Float64}` A length 2 Tuple containing the target acceptance rates for θ and ρ, respectively.
   * By defualt, 0.3 is used for both.
 * `scale::Float64` Scaling parameter to pass into the `stepsize_adjust` function.
   * By default, 2.0 is used.
 * `shape::Float64` Shape parameter to pass into the `stepsize_adjust` function.
-  * By defualt, 30.0 is used.
+  * By defualt, 10.0 is used.
 * `offset::Float64` Offset parameter to pass into the `stepsize_adjust` function.
   * By default, 1.5 is used.
-* `eta::Float64` Learning rate for the gradient descent.
-  * By default, 0.1 is used.
+* `mdl_apnd::String` String to append to the beginning of generated plot file names.
 ---
 Returns
 * `stepsize::StepSize` Struct containing the calculated stepsizes that will result in the target acceptance rate.
 """
 function find_stepsize(model,data::DataStr,nbatch::Int,batchsize::Int,prior_data::PriorData,
-    nx::Int,ntheta::Int,nloc::Int;theta_init::Union{Vector{Float64},Float64}=0.5,
-    make_plots::Bool=true,show_plots::Bool=true,save_plots::Bool=true,
-    init::Float64=1e-3,target::Vector{Float64}=[0.3,0.3],eta::Float64=0.3,
-    scale::Float64 = 2.0,shape::Float64=10.0,offset::Float64=1.5,mdl_apnd::String="")
+            nx::Int,ntheta::Int,nloc::Int;theta_init::Union{Vector{Float64},Float64}=0.5,
+            make_plots::Bool=true,show_plots::Bool=true,save_plots::Bool=true,
+            init::Float64=1e-3,target::Vector{Float64}=[0.3,0.3],
+            scale::Float64 = 2.0,shape::Float64=10.0,offset::Float64=1.5,mdl_apnd::String="")
 
     if typeof(theta_init) == Float64
         theta_init = repeat([theta_init],ntheta)

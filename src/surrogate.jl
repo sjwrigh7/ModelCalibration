@@ -50,15 +50,32 @@ function surrogate_model(x::Array{Float64},theta::Array{Float64},
 end
 
 """
+    train_model!(model)
+    train_model!(model;epochs::Int,make_plots::Bool,save_plots::Bool,show_plots::Bool,
+    mdl_apnd::String)
+Function to train the surrogate model with Bayesian inference via elliptical slice sampling.
 
+---
+Positional arguments
+* `model` Surrogate model.
+
+Keyword arguments
+* `epochs::Int` The number of MCMC samples for training the model.
+  * default value of 2500
+* `make_plots::Bool` Indicator of whether to make plots.
+  * default value of true
+* `save_plots::Bool` Indicator of whether to save the plots.
+  * default value of true
+* `show_plots::Bool` Indicator of whether to show the plots.
+  * default value of true
+* `mdl_apnd::String` String to append to the front of the generated plots' file names.
+  * default value of ""
 """
 function train_model!(model;epochs::Int=2500,make_plots::Bool=true,
-    save_plots::Bool=true,show_plots::Bool=true,mdl_apnd::String="")
+            save_plots::Bool=true,show_plots::Bool=true,mdl_apnd::String="")
+
     model_chains = [ess(model[i],nIter=epochs) for i in eachindex(model)]
 
-    #println(typeof(model_chains))
-    #println(typeof(model_chains[1]))
-    #return model_chains
     if make_plots
         for i in eachindex(model)
             p = Plots.plot(model_chains[i]',label=false)
@@ -74,13 +91,14 @@ function train_model!(model;epochs::Int=2500,make_plots::Bool=true,
 end
 
 """
-    predict_y_all(theta_settings::Vector{Float64},model::Vector{GPE})
+    predict_y_all(theta_settings::Vector{Float64},model)
 
 Function to get the default surrogate model output for a specified input setting.
 
 ---
 Keyword arguments
 * `theta_settings::Vector{Float64}` Vector of θ input settings for prediction.
+* `model` Surrogate model.
 
 ---
 Returns

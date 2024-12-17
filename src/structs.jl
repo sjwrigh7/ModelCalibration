@@ -31,16 +31,16 @@ Keyword arguments
 end
 
 """
-    GridData(sig_star2::Int=100,rho::Int=100)
-Structure containing the grid information for σ*^2 and ρ for the Griddy Gibbs precomputation.
+    GridData(phi::GridPar,rho::GridPar)
+Structure containing the grid information for ϕ and ρ for the Griddy Gibbs precomputation.
 
 ---
 Keyword arguments
-* `sig_star2::GridPar` Structure specifying the bounds and number of grid points to evaluate for σ*^2 during precomputation.
+* `phi::GridPar` Structure specifying the bounds and number of grid points to evaluate for ϕ during precomputation.
 * `rho::GridPar` Structure specifying the bounds and number of grid points to evaluate for ρ during precomputation. The bounds should be in (0,1).
 """
 @with_kw mutable struct GridData
-    sig_star2::GridPar
+    phi::GridPar
     rho::GridPar
 end
 
@@ -50,9 +50,9 @@ Structure containing scaling information for the response variable, y, and the u
 
 ---
 Keyword arguments
-* `y::ScalePar`
-* `theta::ScalePar`
-* `x::ScalePar`
+* `y::ScalePar` Scaling data for y.
+* `theta::ScalePar` Scaling data for theta.
+* `x::ScalePar` Scaling data for x.
 """
 @with_kw struct Scaling
     y::ScalePar
@@ -77,7 +77,8 @@ Keyword arguments
 end
 
 """
-    SimStr(x::Array{Float64},y::Vector{Float64},theta::Array{Float64})
+    SimStr(x::Array{Float64},y::Vector{Float64},theta::Array{Float64},x_reps::Array{Float64},
+    y_reps::Vector{Float64},theta_reps::Array{Float64})
 Structure containing the data from the computer simulation, organized for building a surrogate model.
 
 ---
@@ -113,7 +114,7 @@ Keyword arguments
     x::Array{Float64}
     y::Array{Float64}
     x_reps::Array{Float64}
-    y_reps::Array{Float64}
+    y_reps::Vector{Float64}
 end
 
 """
@@ -166,14 +167,15 @@ Keyword arguments
 end
 
 """
-    BulkVarsStruct(theta::Array{Float64},sig2::Vector{Float64},tau2::Vector{Float64},delta::Array{Float64},rho::Array{Float64},accept::Array{Bool},ratio::Array{Float64})
+    BulkVarsStruct(theta::Array{Float64},sig2::Vector{Float64},tau2::Vector{Float64},
+    delta::Array{Float64},rho::Array{Float64},accept::Array{Bool},ratio::Array{Float64})
 Data structure containing the samples and Metropolis-Hastings information from the Markov Chain Monte Carlo simulation sampling of the posterior distribution in the Bayesian model calibration.
 
 ---
 Keyword arguments
 * `theta::Array{Float64}` An Array to store the samples of θ during the MCMC simulation, dimensions n and m.
-* `sig2::Vector{Float64}` A Vector to store the samples of τ^2 during the MCMC simulation, length n.
-* `tau2::Vector{Float64}` A Vector to store the samples of σ^2 during the MCMC simulation, length n.
+* `sig2::Vector{Float64}` A Vector to store the samples of σ^2 during the MCMC simulation, length n.
+* `tau2::Vector{Float64}` A Vector to store the samples of τ^2 during the MCMC simulation, length n.
 * `delta::Array{Float64}` An Array to store the samples of δ during the MCMC simulation, dimensions n and q.
 * `rho::Array{Float64}` An Array to store the samples of ρ during the MCMC simulation, dimensions n and p.
 * `accept::Array{Bool}` An Array to store the acceptance status of each Metropolis-Hastings update during the MCMC, dimensions n and p+m.
@@ -191,38 +193,40 @@ Keyword arguments
 end
 
 """
-    GriddyVarsStruct(theta::Vector{Int},sig2::Vector{Float64},sig_star2::Vector{Float64},rho::Vector{Float64})
+    GriddyVarsStruct(theta::Vector{Int},sig2::Vector{Float64},phi::Vector{Float64},
+    rho::Vector{Float64})
 Data structure containing posterior index samples for the griddy Gibbs sampler.
 
 ---
 Keyword arguments
 * `theta::Vector{Int}` A Vector to store the index of the values of θ during the MCMC simulation, length n.
 * `sig2::Vector{Float64}` A Vector to store the samples of τ^2 during the MCMC simulation, length n.
-* `sig_star2::Vector{Int}` A Vector to store the samples of σ*^2 during the MCMC simulation, length n.
+* `phi::Vector{Int}` A Vector to store the samples of ϕ during the MCMC simulation, length n.
 * `rho::Vector{Int}` A Vector to store the samples of ρ during the MCMC simulation, length n.
 """
 @with_kw mutable struct GriddyVarsStruct
     theta::Vector{Int}
     sig2::Vector{Float64}
-    sig_star2::Vector{Int}
+    phi::Vector{Int}
     rho::Vector{Int}
 end
 
 """
-    GriddyPosteriors(theta::Array{Float64},sig2::Vector{Float64},sig_star2::Vector{Float64},rho::Vector{Float64})
+    GriddyPosteriors(theta::Array{Float64},sig2::Vector{Float64},phi::Vector{Float64},
+    rho::Vector{Float64})
 Struct to store the posterior samples from the griddy Gibbs sampler, converted from the posterior indices.
 
 ---
 Keyword arguments
 * `theta::Array{Float64}` Array of unknown computer model parameter samples.
 * `sig2::Vector{Float64}` Vector of data model variance parameter samples.
-* `sig_star2::Vector{Float64}` Vector of discrepancy variance parameter samples.
+* `phi::Vector{Float64}` Vector of discrepancy variance parameter samples.
 * `rho::Vector{Float64}` Vector of discrepancy correlation parameter samples.
 """
 @with_kw mutable struct GriddyPosteriors
     theta::Array{Float64}
     sig2::Vector{Float64}
-    sig_star2::Vector{Float64}
+    phi::Vector{Float64}
     rho::Vector{Float64}
 end
 
@@ -234,8 +238,8 @@ Data structure containing the most recently sampled values for each parameter du
 Keyword arguments
 * `theta::Vector{Float64}` A Vector of length m containing the most recently sampled values of each of the m θ parameters.
 * `delta::Vector{Float64}` A Vector of length q containing the most recently sampled values of δ.
-* `sig2::Float64` The most recently sampled value of τ^2.
-* `tau2::Float64` The most recently sampled value of σ^2.
+* `sig2::Float64` The most recently sampled value of σ^2.
+* `tau2::Float64` The most recently sampled value of τ^2.
 * `rho::Vector{Float64}` A Vector of length p containing the most recently sampled values of each of the p ρ parameters.
 """
 @with_kw mutable struct UpdatedVars

@@ -7,7 +7,7 @@
 Function to calculate the correlation value between two locations, `x1` and `x2`, given the correlation parameters, `rho`.
 
 ---
-Keyword arguments
+Positional arguments
 * `x1::Vector{Float64}` Vector of settings at the first location, length nx.
 * `x2::Vector{Float64}` Vector of settings at the second location, length nx.
 * `rho::Vector{Float64}` Vector of correlation parameters (ρ) across the different dimensions of x, length nx.
@@ -34,26 +34,26 @@ function correlation_kernel(x1::Vector{Float64},x2::Vector{Float64},
 end
 
 """
-    correlation_construct(rho::Vector{Float64},x::Array{Float64},nx::Int64,nobs::Int64)
+    correlation_construct(rho::Vector{Float64},x::Array{Float64,2},nx::Int64,nobs::Int64)
 Function to construct the correlation Matrix for a set of x locations.
 
 ---
-Keyword arguments
+Positional arguments
 * `rho::Vector{Float64}` Vector of correlation parameters (ρ) across the different dimensions of x, length nx.
-* `x::Array{Float64}` Array of x locations for calculating the correlation Matrix, dimensions nobs and nx.
+* `x::Array{Float64,2}` Array of x locations for calculating the correlation Matrix, dimensions nobs and nx.
 * `nx::Int64` The number of x dimensions.
 * `nobs::Int64` The number of data points for calculating the correlation Matrix.
 
 ---
 Returns
-* `correlation::Array{Float64}` The correlation matrix of x, given ρ.
+* `correlation::Array{Float64,2}` The correlation matrix of x, given ρ.
 
 ---
 Details
 An nobs by nobs Matrix is initialized and, at each [i,j] index in the matrix, `correlation_kernel` is called to calculate the correlation given ρ, x[i,:], and x[j,:].
 The square root of the machine precision for a Float64 is added to the diagonal elements of the Matrix for stability purposes.
 """
-function correlation_construct(rho::Array{Float64},x::Array{Float64},
+function correlation_construct(rho::Vector{Float64},x::Array{Float64,2},
     nx::Int64,nobs::Int64)
     correlation = Matrix(1.0I,nobs,nobs)     #allocate array to store correlation
     @inbounds for i in 1:nobs                #loop over number of obs

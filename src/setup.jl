@@ -2,20 +2,22 @@
 ############################# Define Misc Functions ###############################
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
 """
-    setup(design::Array{Float64},simobs::Vector{Float64},expobs::Union{Array{Float64},Float64},nx::Int,ntheta::Int,alpha_sig2::Float64,beta_sig2::Float64,alpha_tau2::Float64,beta_tau2::Float64,a_rho::Float64,b_rho::Float64)
+    setup(design_raw::Array{Float64,2},simobs_raw::Vector{Float64},expobs_raw::Union{Array{Float64},
+    Float64},nx::Int,ntheta::Int,alpha_sig2::Float64,beta_sig2::Float64,alpha_tau2::Float64,
+    beta_tau2::Float64,a_rho::Float64,b_rho::Float64)
 Function to perform necessary calculation prior to calibration.
 
 ---
-Keyword arguments
-* `design::Array{Float64}` Matrix of input values for the computer simulator, of dimensions n and p+m. The first p columns correspond to control variables (x) and the last m correspond to unknown variables (θ).
-* `simobs::Vector{Float64}` Vector of response values from the computer simulator, of length n. The rows must correspond to their appropriate input settings in `design`.
-* `expobs::Union{Array{Float64},Float64}` Matrix of experimental data, of dimensions v and p+1. The first p columns correspond the control independent variables (x) and the last column corresponds to the observed response.
+Positional arguments
+* `design_raw::Array{Float64,2}` Matrix of input values for the computer simulator, of dimensions n and p+m. The first p columns correspond to control variables (x) and the last m correspond to unknown variables (θ).
+* `simobs_raw::Vector{Float64}` Vector of response values from the computer simulator, of length n. The rows must correspond to their appropriate input settings in `design`.
+* `expobs_raw::Union{Array{Float64},Float64}` Matrix of experimental data, of dimensions v and p+1. The first p columns correspond the control independent variables (x) and the last column corresponds to the observed response.
 * `nx::Int` The number of independent control variables (x) in the experimental and computer simulator data.
 * `ntheta::Int` The number of independent unknown variables (θ) in the computer simulator data.
-* `alpha_sig2::Float64` Inverse Gamma shape parameter for the data error variance prior (τ^2).
-* `beta_sig2::Float64` Inverse Gamma scale parameter for the data error variance prior (τ^2).
-* `alpha_tau2::Float64` Inverse Gamma shape parameter for the discrepancy vairiance prior (σ^2).
-* `beta_tau2::Float64` Inverse Gamma scale parameter for the discrepancy variance prior (σ^2).
+* `alpha_sig2::Float64` Inverse Gamma shape parameter for the data error variance prior (σ^2).
+* `beta_sig2::Float64` Inverse Gamma scale parameter for the data error variance prior (σ^2).
+* `alpha_tau2::Float64` Inverse Gamma shape parameter for the discrepancy vairiance prior (τ^2).
+* `beta_tau2::Float64` Inverse Gamma scale parameter for the discrepancy variance prior (τ^2).
 * `a_rho::Float64` Beta shape parameter 1 for the discrepancy correlation prior (ρ).
 * `b_rho::Float64` Beta shape parameter 2 for the discrepancy correlation prior (ρ).
 
@@ -29,9 +31,10 @@ Returns
 * `priors::PriorData` A data structure containing the prior distribution hyperparameters.
 """
 function setup(design_raw::Array{Float64},simobs_raw::Vector{Float64},
-    expobs_raw::Union{Array{Float64},Float64},nx::Int,ntheta::Int,
-    alpha_sig2::Float64,beta_sig2::Float64,alpha_tau2::Float64,
-    beta_tau2::Float64,a_rho::Float64,b_rho::Float64)
+            expobs_raw::Union{Array{Float64},Float64},nx::Int,ntheta::Int,
+            alpha_sig2::Float64,beta_sig2::Float64,alpha_tau2::Float64,
+            beta_tau2::Float64,a_rho::Float64,b_rho::Float64)
+
     if length(size(expobs_raw)) == 0                                   # ensure data is formatted as an array (in the case of univarite normal distribution data)
         expobs_raw = [expobs_raw]
     end
@@ -112,7 +115,7 @@ end
 Function to un-normalize a normalized variable's Array data. This function takes data ∈ [0,1] and scales it based on the `scales`.
 
 ---
-Keyword arguments
+Positional arguments
 * `var::Array{Float64}` The array of field values to be scaled, with dimensions n and p.
 * `scales::ScalePar` The data structure containing the minimum and maximum values for scaling. The minimum and maximum values specified in this structure must be Vectors of length p.
 ---
@@ -120,7 +123,6 @@ Keyword arguments
 ---
 Returns
 * `output::Array{Float64}` An array containing the original field values, `var`, scaled to show the relative distance between the minimum and maximum values specified by `scales`.
-
 """
 function unnormalize_var(var::Array{Float64},scales::ScalePar)
     output = similar(var)
@@ -151,7 +153,7 @@ Function to scale a single variable's Array data to the relative distance betwee
 The function returns an Array, `output`, of equal size to `var` with its data scaled based on the minimum and maximum value described in `values`.
 
 ---
-Keyword arguments
+Positional arguments
 * `var::Array{Float64}` The array of field values to be scaled, with dimensions n and p.
 * `scales::ScalePar` The data structure containing the minimum and maximum values for scaling. The minimum and maximum values specified in this structure must be Vectors of length p.
 ---
@@ -184,18 +186,22 @@ function normalize_var(var::Array{Float64},scales::ScalePar)
 end
 
 """
-    normalize_data(design_in::Array{Float64},simobs_in::Vector{Float64},expobs_in::Array{Float64},nx::Int64,nsim::Int64,scales::scaling,rev::Bool=false)
+    normalize_data(design_in::Array{Float64},simobs_in::Vector{Float64},
+    expobs_in::Union{Array{Float64},Float64},nx::Int64,nsim::Int64,scales::scaling,rev::Bool=false)
 Function to normalize data to the [0,1] interval or reverse the normalization back to the original data.
 
 ---
-Keyword arguments
+Positional arguments
 * `design_in::Array{Float64}` Matrix of input values for the computer simulator, of dimensions n and p+m. The first p columns correspond to control variables (x) and the last m correspond to unknown variables (θ).
 * `simobs_in::Vector{Float64}` Vector of response values from the computer simulator, of length n. The rows must correspond to their appropriate input settings in `design`.
 * `expobs_in::Union{Array{Float64},Float64}` Matrix of experimental data, of dimensions v and p+1. The first p columns correspond the control independent variables (x) and the last column corresponds to the observed response.
 * `nx::Int64` The number of independent control variables (x) in the experimental and computer simulator data.
 * `nsim::Int64` The number of computer simulator data points.
 * `scales::Scaling` Data structure containing minimum and maximum values for the x, y, and θ variables for scaling.
+
+Optional arguments
 * `rev::Bool` An indicator of whether to normalize the data or reverse the normalization. Default value of false.
+  * default value of false
 
 ---
 Returns
@@ -210,8 +216,9 @@ Concatenates all values for each dimension of x in the computer simulator and ex
 Calls `normalize_var` or `unnormalize_var` on the concatenated y data, the concatenated x data in each dimension of x, and the computer simulator θ values for each dimension of θ.
 """
 function normalize_data(design_in::Array{Float64},simobs_in::Vector{Float64},
-    expobs_in::Union{Array{Float64},Float64},nx::Int64,
-    nsim::Int64,scales::Scaling,rev::Bool=false)
+            expobs_in::Union{Array{Float64},Float64},nx::Int64,
+            nsim::Int64,scales::Scaling,rev::Bool=false)
+
     # if there are x variables, concatenate them of across computer simulator and experimental data and then normalize them
     if nx > 0
         x_in = vcat(design_in[:,1:nx],expobs_in[:,1:nx])
@@ -241,13 +248,13 @@ function normalize_data(design_in::Array{Float64},simobs_in::Vector{Float64},
 end
 
 """
-    pivot_data_wide(expobs::Array{Float64})
+    pivot_data_wide(x::Array{Float64},y::Vector{Float64})
 Function to pivot multiple observations of the same n-length multivariate normal distribution into a wider array.
 Given there are m repeated observations of the same n-length multivariate normal distribution, with each repeated observation having the same independent variable settings,
 this function will reorganize the m*n length Array into a wider pivoted observation data Array, which is preferrable for likelihood calculations. 
 
 ---
-Keyword arguments
+Positional arguments
 * `x::Array{Float64}` An Array of dimensions n*m and p, containing the settings of the p independent variables at each observational data point
 * `y::Vector{Float64}` A Vector of length n*m, containing the experimental observations aligning to the settings specified in `x`
 
@@ -313,7 +320,7 @@ end
 Function to format raw data arrays supplied by `design`, `simobs`, and `expobs` into the requisatory structures for model calibration
 
 ---
-Keyword arguments
+Positional arguments
 * `design::Array{Float64}` An Array containing the input settings for both the control and unknown independent variables in the computer simulator. Dimenions n and p+m. The first p columns contain the control variables and the last m columns contain the unknown variables.
 * `simobs::Vector{Float64}` A Vector containing the response of the computer simulator, corresponding to the inputs specified in `design`. Length n.
 * `expobs::Array{Float64}` An Array containing the experimental data to which the computer model is calibrated. Dimensions n and p+1. The first p columns contain the control variables and the last column contains the observations.
@@ -324,7 +331,8 @@ Returns
 * `data::data_str` The data structure containing the `sim_str` and `exp_str` data structures housing the computer simulator and experimental data, respectively.
 """
 function format_data(design::Array{Float64},simobs::Vector{Float64},
-    expobs::Array{Float64},nx::Int64)
+            expobs::Array{Float64},nx::Int64)
+
     sim_x = design[:,1:nx]     #pull x vars from sim data
     sim_theta = design[:,(nx+1):end] # pull theta vars from sim data
     sim_theta_unique = unique(sim_theta,dims=1)
@@ -343,16 +351,17 @@ function format_data(design::Array{Float64},simobs::Vector{Float64},
 end
 
 """
-    format_prior_hyperparameters(data::DataStr,alpha_sig2::Float64,beta_sig2::Float64,alpha_tau2::Float64,beta_tau2::Float64,a_rho::Float64,b_rho::Float64,nx::Int64,ntheta::Int64)
+    format_prior_hyperparameters(data::DataStr,alpha_sig2::Float64,beta_sig2::Float64,
+    alpha_tau2::Float64,beta_tau2::Float64,a_rho::Float64,b_rho::Float64,nx::Int64,ntheta::Int64)
 Funtion to initialize the specified prior distribution hyperparameters into the requisatory struct.
 
 ---
-Keyword arguments
+Positional arguments
 * `data::DataStr` Struct containing the computer simulator and experimental data.
-* `alpha_sig2::Float64` Inverse Gamma shape parameter for the data error variance prior (τ^2).
-* `beta_sig2::Float64` Inverse Gamma scale parameter for the data error variance prior (τ^2).
-* `alpha_tau2::Float64` Inverse Gamma shape parameter for the discrepancy vairiance prior (σ^2).
-* `beta_tau2::Float64` Inverse Gamma scale parameter for the discrepancy variance prior (σ^2).
+* `alpha_sig2::Float64` Inverse Gamma shape parameter for the data error variance prior (σ^2).
+* `beta_sig2::Float64` Inverse Gamma scale parameter for the data error variance prior (σ^2).
+* `alpha_tau2::Float64` Inverse Gamma shape parameter for the discrepancy vairiance prior (τ^2).
+* `beta_tau2::Float64` Inverse Gamma scale parameter for the discrepancy variance prior (τ^2).
 * `a_rho::Float64` Beta shape parameter 1 for the discrepancy correlation prior (ρ).
 * `b_rho::Float64` Beta shape parameter 2 for the discrepancy correlation prior (ρ).
 * `nx::Int` Integer specifying the number of independent control variables (x).
@@ -371,8 +380,9 @@ This function is agnostic to what prior distributions are used for the model but
 * ρ ∼ Beta(a,b)
 """
 function format_prior_hyperparameters(data::DataStr,alpha_sig2::Float64,
-    beta_sig2::Float64,alpha_tau2::Float64,beta_tau2::Float64,a_rho::Float64,
-    b_rho::Float64,nx::Int,ntheta::Int)
+            beta_sig2::Float64,alpha_tau2::Float64,beta_tau2::Float64,a_rho::Float64,
+            b_rho::Float64,nx::Int,ntheta::Int)
+
     theta = data.sim.theta                    #pull theta
     
     theta_lower = vec(minimum(theta,dims=1))

@@ -2,16 +2,22 @@
 ####################### Define Grid Generation Functions ########################
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
 """
-    find_lik_asymptote(data::DataStr,theta::Vector{Float64},covar::Array{Float64},delta::Float64)
+    find_lik_asymptote(model,data::DataStr,theta::Vector{Float64},covar::Array{Float64,2};
+    delta::Float64=1e-3,convergence::Float64=1e-12)
 Function to determine the approximate values of θ that result in the start of the asymptote of the likelihood function.
 
 ---
-Keyword arguments
+Positional arguments
+* `model` Surrogate model.
 * `data::DataStr` Struct containing the computer simulator and experimental data.
 * `theta::Vector{Float64}` Maximum likelihood estimates for θ.
-* `covar::Array{Float64}` Maximum likelihood estimate for the covariance matrix of the data model.
-* `delta::Float64` Step size in θ.
+* `covar::Array{Float64,2}` Maximum likelihood estimate for the covariance matrix of the data model.
 
+Keyword arguments
+* `delta::Float64` Step size in θ.
+  * default value of 1E-3.
+* `convergence::Float64` Convergence criteria for algorithm. When the cange in likelihood divided by the maximum likelihood is less than this value, the algorithm will terminate.
+  * default value of 1E-12
 ---
 Returns
 * `upper_bounds::Vector{Float64}` Vector of θ values greater than their MLE that correspond to the start of the asymptotic behavior of the likelihood function.
@@ -20,68 +26,99 @@ Returns
 ---
 Details
 """
-function find_lik_asymptote(data::DataStr,theta::Vector{Float64},
-    covar::Array{Float64},delta::Float64,model)
+function find_lik_asymptote(model,data::DataStr,theta::Vector{Float64},
+            covar::Array{Float64,2};delta::Float64=1E-3,convergence::Float64=1E-12)
+    #get surrogte estimate at MLE
     response_mle = predict_y_all(theta,model)
+    #calculate likelihood at MLE
     max_lik = prod(pdf(MvNormal(response_mle,covar),data.exp.y))[1]
+    #initialize vectors for storing upper and lower bounds
     upper_bounds = Vector{Float64}(undef,length(theta))
     lower_bounds = similar(upper_bounds)
 
+    #initialize additional arrays
+    lik_vals = Vector{Float64}(undef,2)
+    lik_vals[:] .= max_lik
+    #loop over theta
     for i in eachindex(theta)
+        #calculate upper bounds
+
+        #initialize change in likelihood at sufficiently large value
         epsilon = 10
         
-        new_lik = copy(max_lik)
+        #set theta values to MLE
         theta_delta = copy(theta)
-        while((epsilon > 1e-20) || (new_lik > (0.5*max_lik)))
-            old_lik = copy(new_lik)
+
+        #while loop for change in likelihood and magnitude of likelihood
+        while((epsilon > convergence) || (new_lik > (0.5*max_lik)))
+            #set old likelihood to last iteration's new likelihood
+            lik_vals[1] .= lik_vals[2]
+            #increment theta
             theta_delta[i] += delta
+            #calculate new likelihood
             response = predict_y_all(theta_delta,model)
-            new_lik = prod(pdf(MvNormal(response,covar),data.exp.y))[1]
-            #println("lik = $new_lik")
-            epsilon = abs(new_lik - old_lik)/max_lik
-            #println("eps = $epsilon")
-            #println("theta = $theta_delta")
-            upper_bounds[i] = theta_delta[i]
+            lik_vals[2] .= prod(pdf(MvNormal(response,covar),data.exp.y))[1]
+            
+            #calculate change in likelihood
+            epsilon = abs(lik_vals[2] - lik_vals[1])/max_lik
+
+            #store current value of theta
+            upper_bounds[i] .= theta_delta[i]
         end
 
+        #calculate lower bounds
+
+        #reinitialize epsilon at a sufficiently large value
         epsilon = 10
-        new_lik = copy(max_lik)
+        
+        #set theta values to MLE
         theta_delta = copy(theta)
-        while((epsilon > 1e-20) || new_lik > (0.5*max_lik))
-            old_lik = copy(new_lik)
+        while((epsilon > convergence) || new_lik > (0.5*max_lik))
+            #set old likelihood to last iteration's new likelihood
+            lik_vals[1] .= lik_vals[2]
+            #increment theta
             theta_delta[i] -= delta
+            #calculate new likelihood
             response = predict_y_all(theta_delta,model)
-            new_lik = sum(pdf(MvNormal(response,covar),data.exp.y))[1]
-            epsilon = abs(new_lik - old_lik)/max_lik
-            lower_bounds[i] = theta_delta[i]
+            lik_vals[2] .= prod(pdf(MvNormal(response,covar),data.exp.y))[1]
+            
+            #calculate change in likelihood
+            epsilon = abs(lik_vals[2] - lik_vals[1])/max_lik
+
+            #store current value of theta
+            upper_bounds[i] .= theta_delta[i]
         end
     end
     return upper_bounds,lower_bounds
 end
 
 """
-    format_doe(doe::Array{Float64},data::DataStr,nobs::Int,nx::Int,ntheta::Int)
+    format_doe(doe::Array{Float64,2},data::DataStr,nloc::Int,nx::Int,ntheta::Int)
 Function to format the raw DOE of θ generated by `get_full_fact` to include settings of x variables.
 
 ---
-Keyword arguments
-* `doe::Array{Float64}` DOE to be edited.
+Positional arguments
+* `doe::Array{Float64,2}` DOE to be edited.
 * `data::DataStr` Strucdt containing computer simulator and experimental data.
-* `nobs::Int` The number of x settings for the computer simulator and experimental data.
+* `nloc::Int` The number of x settings for the computer simulator and experimental data.
 * `nx::Int` The number of independent control variables.
 * `ntheta::Int` The number of unknown independent variables in the computer simulator, θ.
 
 ---
 Returns
-* `full_doe::Array{Float64}` The formatted DOE.
+* `full_doe::Array{Float64,2}` The formatted DOE.
 """
-function format_doe(doe::Array{Float64},data::DataStr,nobs::Int,nx::Int,ntheta::Int)
+function format_doe(doe::Array{Float64,2},data::DataStr,nloc::Int,nx::Int,ntheta::Int)
+    #calculate size size of and allocate DOE to return
     num_design = size(doe)[1]
     num_row = num_design*nobs
     full_doe = Array{Float64}(undef,num_row,(nx+ntheta))
+    #loop over theta settings in original DOE
     for i in 1:num_design
-        start = (i-1)*nobs + 1
-        stop = i*nobs
+        #calculate slicing indices for repeating each theta over the number of x locations
+        start = (i-1)*nloc + 1
+        stop = i*nloc
+        #store x and theta values
         full_doe[start:stop,1:nx] .= data.exp.x
         full_doe[start:stop,(nx+1):(nx+ntheta)] .= repeat(doe[i,:]',nobs,1)
     end
@@ -89,50 +126,60 @@ function format_doe(doe::Array{Float64},data::DataStr,nobs::Int,nx::Int,ntheta::
 end
 
 """
-    get_full_fact(n::Int,ntheta::Int,bounds:;Tuple{Vector{Float64}})
+    get_full_fact(n::Int,ntheta::Int,bounds::Tuple{Vector{Float64},Vector{Float64}})
 Function to generate a full factorial, uniform grid, design of experiments for θ, in the bounds specified.
 
 ---
-Keyword arguments
+Positional arguments
 * `n::Int` The number of grid points to use per dimension of θ.
 * `ntheta::Int` The number of unknown independent variables in the computer simulator.
-* `bounds::Tuple{Vector{Float64}}` A Tuple of two Vectors, each having a length of `ntheta`, that specify the bounds for each θ. The first Vector in the Tuple contains the upper bounds and the second Vector contains the lower bounds.
+* `bounds::Tuple{Vector{Float64},Vector{Float64}}` A Tuple of two Vectors, each having a length of `ntheta`, that specify the bounds for each θ. The first Vector in the Tuple contains the upper bounds and the second Vector contains the lower bounds.
 
 ---
 Returns
-* `doe::Array{Float64}` design of experiments.
+* `doe::Array{Float64,2}` design of experiments.
 """
 function get_full_fact(n::Int,ntheta::Int,
-        bounds::Tuple{Vector{Float64},Vector{Float64}})
+            bounds::Tuple{Vector{Float64},Vector{Float64}})
     
+    #allocate array for factorial values
     fact_vals = Array{Float64}(undef,n,ntheta)
+    #loop over thetas and store grid points for each
     for theta in 1:ntheta
         fact_vals[:,theta] .= collect(range(bounds[2][theta],bounds[1][theta],length=n))
     end
+    #allocate DOE matrix
     doe = Array{Float64}(undef,n^ntheta,ntheta)
+    #loop over thetas
     for j in axes(doe)[2]
-        reps = repeat(fact_vals[:,j],inner=n^(j-1),outer=n^(size(doe)[2]-(j)))
-        doe[:,j] .= reps
+        #store grid points for theta
+        #use repeat function with inner and outer values to get full factorial design
+        doe[:,j] .= repeat(fact_vals[:,j],inner=n^(j-1),outer=n^(size(doe)[2]-(j)))
     end
     return doe
 end
 
 """
-    generate_sample_grid(n::Int,data::DataStr,nx::Int,ntheta::Int,delta::Float64=1e-3,model=model)
+    generate_sample_grid(n::Int,data::DataStr,nx::Int,ntheta::Int,model;
+    delta::Float64=1e-3,convergence::Float64=1e-12)
 Function to generate the sampling grid for the griddy gibbs approach.
 
 ---
-Keyword arguments
+Positional arguments
 * `n::Int` The number of grid points per dimension of θ.
 * `data::DataStr` Struct containing the computer simulator and experimental data.
 * `nx::Int` The number of x dimensions.
 * `ntheta::Int` The number of θ dimensions.
-* `delta::Float64` The step-size to use for the asymptote calculation algorithm, default value of 1E-3.
 * `model` The surrogate model used for calculating the bounds. The default model is the vectorized Gaussian process model generated by this package.
 
+Keyword arguments
+* `delta::Float64` The increment by which to adjust theta in the asymptote calculation,
+  * default value of 1E-3
+* `convergence::Float64` Convergence criteria for algorithm. When the cange in likelihood divided by the maximum likelihood is less than this value, the algorithm will terminate.
+  * default value of 1E-12
 ---
 Returns
-* `doe::Array{Float64}` The sampling grid for θ to use for the griddy Gibbs sampler.
+* `doe::Array{Float64,2}` The sampling grid for θ to use for the griddy Gibbs sampler.
 
 ---
 Details
@@ -141,13 +188,16 @@ After the MLE are solved, the approximate asymtptotes of the likelihood function
 During this step, the θ values closest to the θ MLEs that generate asymptotic likelihood values are calculated.
 With these bounds for θ solved, a full factorial, uniform grid DOE is generated over the bounds of θ.
 """
-function generate_sample_grid(n::Int,data::DataStr,nx::Int,ntheta::Int;
-    delta::Float64=1e-3,epochs::Int=7000,model=model)
+function generate_sample_grid(n::Int,data::DataStr,nx::Int,ntheta::Int,model;
+            delta::Float64=1e-3,convergence::Float64=1e-12)
+    
     nloc = size(data.exp.y)[1]
+    #get MLE for theta and covar
     theta_mle,covar_mle = get_mle(data,nx,nloc,ntheta;epochs=epochs,model=model)
     bounds = find_lik_asymptote(data,theta_mle,covar_mle,delta,model)
-    println(bounds)
+    #generate theta grid using bounds
     doe = get_full_fact(n,ntheta,bounds)
+    #predict surrogate model for each point in theta grid
     response = Array{Float64}(undef,size(doe)[1],nloc)
     for i in axes(response)[1]
         response[i,:] = predict_y_all(doe[i,:],model)

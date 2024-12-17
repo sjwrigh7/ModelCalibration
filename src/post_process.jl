@@ -8,11 +8,12 @@ Function to normalize or reverse the normalization of the posterior samples.
 This is the implementation for the continuous sampler results.
 
 ---
-Keyword arguments
+Positional arguments
 * `samples::BulkVarsStruct` Struct containing the posterior samples.
 * `scales::Scaling` Struct containing the minimum and maximum values for each variables.
 Optional arguments
 * `rev::Bool` Indicator of whether to reverse the normalization or not.
+  * default value of true.
 """
 function normalize_samples(samples::BulkVarsStruct,scales::Scaling,rev::Bool=true)
 
@@ -34,19 +35,22 @@ function normalize_samples(samples::BulkVarsStruct,scales::Scaling,rev::Bool=tru
 end
 
 """
-    normalize_samples(samples::GriddyVarsStruct,scales::Scaling,theta_grid::Array{Float64},sig_grid::Array{Float64})
-    normalize_samples(samples::GriddyVarsStruct,scales::Scaling,theta_grid::Array{Float64},sig_grid::Array{Float64},rev::Bool)
+    normalize_samples(samples::GriddyVarsStruct,scales::Scaling,theta_grid::Array{Float64},
+    sig_grid::Array{Float64})
+    normalize_samples(samples::GriddyVarsStruct,scales::Scaling,theta_grid::Array{Float64},
+    sig_grid::Array{Float64},rev::Bool)
 Function to normalize or reverse the normalization of the posterior samples.
 This implementation is for the griddy Gibbs sampler.
 
 ---
-Keyword arguments
+Positional arguments
 * `samples::GriddyVarsStruct` Struct containing the posterior samples (in index form) from the griddy Gibbs sampler.
 * `scales::Scaling` Struct containing the minimum and maximum values for each variables.
 * `theta_grid::Array{Float64}` Array containing the sampling grid for θ that was used for the griddy Gibbs sampler.
 * `sig_grid::Array{Float64}` Array containing the sampling grid for the proportional covariance matrix used for the griddy Gibbs sampler.
 Optional arguments
 * `rev::Bool` Indicator of whether to reverse the normalization or not.
+  * default value of true.
 
 ---
 Returns
@@ -70,9 +74,10 @@ end
 """
     remove_burn(samples::BulkVarsStruct,nburn::Int)
 Function to extract the posterior samples after the burned values.
+Implementation for the continuous sampler results.
 
 ---
-Keyword arguments
+Positional arguments
 * `samples::BulkVarsStruct` Struct containing the posterior samples from the continuous sampler.
 * `nburn::Int` The number of samples to discard
 
@@ -112,9 +117,10 @@ end
 """
     remove_burn(samples::GriddyPosteriors,nburn::Int)
 Function to extract the posterior samples after the burned values.
+Implementation for the griddy Gibbs sampler results.
 
 ---
-Keyword arguments
+Positional arguments
 * `samples::GriddyPosteriors` Struct containing the posterior samples from the griddy Gibbs sampler.
 * `nburn::Int` The number of samples to discard
 
@@ -148,7 +154,23 @@ function remove_burn(samples::GriddyPosteriors,nburn::Int)
 end
 
 """
+    remove_burn(samples::GriddyVarsStruct,nburn::Int)
+Function to extract the posterior samples after the burned values.
+Implementation for the griddy Gibbs sampler results, still in index form.
 
+---
+Positional arguments
+* `samples::GriddyVarsStruct` Struct containing the posterior samples from the griddy Gibbs sampler.
+* `nburn::Int` The number of samples to discard
+
+---
+Returns
+* `truncated::GriddyVarsStruct` Bulk vars struct that contains the samples retained after discarding the burned samples.
+
+---
+Details
+This selects all posterior samples from `nburn` + 1 through the end of the samples.
+These values are retained and placed into a new posterior samples struct, which is then returned.
 """
 function remove_burn(samples::GriddyVarsStruct,nburn::Int)
     if nburn >= length(samples.sig2)
@@ -173,10 +195,10 @@ end
 """
     thin_samples(samples::BulkVarsStruct,nthin::Int)
 Function to thin the posterior samples, helping remove autocorrelated values from the samples.
-This implementation is for the continuous sampler.
+This implementation is for the continuous sampler results.
 
 ---
-Keyword arguments
+Positional arguments
 * `samples::BulkVarsStruct` Struct storing the posterior samples.
 * `nthin::Int` The number of samples to skip.
 
@@ -223,10 +245,10 @@ end
 """
     thin_samples(samples::GriddyPosteriors,nthin::Int)
 Function to thin the posterior samples, helping remove autocorrelated values from the samples.
-This implementation is for the continuous sampler.
+This implementation is for the griddy Gibbs sampler results.
 
 ---
-Keyword arguments
+Positional arguments
 * `samples::GriddyPosteriors` Struct storing the posterior samples.
 * `nthin::Int` The number of samples to skip.
 
@@ -266,18 +288,18 @@ function thin_samples(samples::GriddyPosteriors,nthin::Int)
 end
 
 """
-    thin_samples(samples::GriddyPosteriors,nthin::Int)
+    thin_samples(samples::GriddyVarsStruct,nthin::Int)
 Function to thin the posterior samples, helping remove autocorrelated values from the samples.
-This implementation is for the continuous sampler.
+This implementation is for the griddy Gibbs sampler, with the results still in index form.
 
 ---
-Keyword arguments
-* `samples::GriddyPosteriors` Struct storing the posterior samples.
+Positional arguments
+* `samples::GriddyVarsStruct` Struct storing the posterior samples.
 * `nthin::Int` The number of samples to skip.
 
 ---
 Returns
-* `thinned::GriddyPosteriors` Struct containing the thinned posterior samples.
+* `thinned::GriddyVarsStruct` Struct containing the thinned posterior samples.
 
 ---
 Details
@@ -316,7 +338,7 @@ Function to take the square root of the posterior samples of the variance parame
 This implementation is for the continuous sampler posterior samples.
 
 ---
-Keyword arguments
+Positional arguments
 * `samples::BulkVarsStruct` Posterior samples from the continuous sampler.
 """
 function sqrt_variance!(samples::BulkVarsStruct)
@@ -339,12 +361,13 @@ function sqrt_variance!(samples::GriddyPosteriors)
 end
 
 """
-    posterior_hist!(data::Array{Float64},nbins::Int,var::String,iter::Int,save_plots::Bool,show_plots::Bool)
+    posterior_hist!(data::Array{Float64},nbins::Int,var::String,iter::Int,save_plots::Bool,
+    show_plots::Bool,mdl_apnd::String)
 Function to generate a combined posterior histogram and kernel density plot for the posterior samples of a variable.
 Optionally, display and/or save the plot.
 
 ---
-Keyword arguments
+Positional arguments
 * `data::Array{Float64}` Array of posterior samples to plot.
 * `nbins::Int` The number of bins to use for the histogram.
 * `var::String` A string specifying the name of the variable being plotted.
@@ -352,9 +375,10 @@ Keyword arguments
   * for a univariate variable, e.g. τ^2, specify 0.
 * `save_plots::Bool` Indicator of whether to save the plot that is generated.
 * `show_plots::Bool` Indicator of whether to display the plot that is generated.
+* `mdl_apnd::String` String to append to the front of the saved plot's file name.
 """
 function posterior_hist!(data::Array{Float64},nbins::Int,var::String,iter::Int,
-    save_plots::Bool,show_plots::Bool,mdl_apnd::String)
+            save_plots::Bool,show_plots::Bool,mdl_apnd::String)
 
     if length(size(data)) == 1
         params = fit(Histogram,data,nbins=nbins)
@@ -408,10 +432,22 @@ function posterior_hist!(data::Array{Float64},nbins::Int,var::String,iter::Int,
 end
 
 """
+    plot_correlation(data::Array{Float64,2},var::String,save_plots::Bool,show_plots::Bool,
+    mdl_apnd::String)
+Function to generate a correlation plot for the samples of a multidimensional variable.
+Optionally, display and/or save the plot.
 
+---
+Positional arguments
+* `data::Array{Float64,2}` Data to plot.
+* `var::String` Name of the variable being plotted.
+* `save_plots::Bool` Indicator of whether to save the plot that is generated.
+* `show_plots::Bool` Indicator of whether to display the plot that is generated.
+* `mdl_apnd::String` String to append to the front of the saved plot's file name.
 """
-function plot_correlation(data::Array{Float64},var::String,save_plots::Bool,
-    show_plots::Bool,mdl_apnd::String)
+function plot_correlation(data::Array{Float64,2},var::String,save_plots::Bool,
+            show_plots::Bool,mdl_apnd::String)
+
     labs = [LaTeXString("\$\\$(var)_{$i}\$") for i in axes(data)[2]]
     p = StatsPlots.corrplot(data,label=labs)
     title!(LaTeXString("\$"*"\\"*"$(var)\$ Correlation"))
@@ -421,18 +457,20 @@ function plot_correlation(data::Array{Float64},var::String,save_plots::Bool,
 end
 
 """
-    trace_plot!(data::Array{Float64},var::String,iter::Int,save_plots::Bool,show_plots::Bool)
+    trace_plot!(data::Array{Float64},var::String,iter::Int,save_plots::Bool,
+    show_plots::Bool,mdl_apnd::String)
 Function to generate a combined posterior histogram and kernel density plot for the posterior samples of a variable.
 Optionally, display and/or save the plot.
 
 ---
-Keyword arguments
+Positional arguments
 * `data::Array{Float64}` Array of posterior samples to plot.
 * `var::String` A string specifying the name of the variable being plotted.
 * `iter::Int` An Integer specifying the iterate of a multidimensional variable, e.g. θ.
   * for a univariate variable, e.g. τ^2, specify 0.
 * `save_plots::Bool` Indicator of whether to save the plot that is generated.
 * `show_plots::Bool` Indicator of whether to display the plot that is generated.
+* `mdl_apnd::String` String to append to the front of the saved plot's file name.
 """
 function trace_plot!(data::Array{Float64},var::String,iter::Int,
     save_plots::Bool,show_plots::Bool,mdl_apnd::String)
@@ -453,13 +491,14 @@ function trace_plot!(data::Array{Float64},var::String,iter::Int,
 end
 
 """
-    plot_credible_bounds(data::Array{Float64},x_coords::Array{Float64})
+    plot_credible_bounds(data::Array{Float64},x_coords::Array{Float64},scales::ScalePar)
 Function to generate a plot of a function over the x coordinates of the data along with its 95% credible bounds.
 
 ---
-Keyword arguments
+Positional arguments
 * `data::Array{Float64}` Function's data to plot.
 * `x_coords::Array{Float64}` the x coordinates of the data.
+* `scales::ScalePar` Struct containing the minimum and maximum value of the variable in `data`.
 
 ---
 Returns
@@ -483,19 +522,49 @@ function plot_credible_bounds(data::Array{Float64},x_coords::Array{Float64},scal
 end
 
 """
-    plot_disc!(delta::Array{Float64},x_coords::Array{Float64},nbins::Int,show_plots::Bool,save_plots::Bool)
+    plot_disc!(delta::Array{Float64},x_coords::Array{Float64},scales::Scaling,
+    show_plots::Bool,save_plots::Bool,mdl_apnd::String)
 Function to generate plots for the discrepancy function.
+This implementation does not generate a histogram or trace plot.
 
 ---
-Keyword arguments
+Positional arguments
 * `delta::Array{Float64}` Array containing the posterior samples of the discrepancy function, each row of the Matrix is a sample of δ.
 * `x_coords::Array{Float64}` Array containing the x coordinates from the experimental data.
+* `scales::Scaling` Struct containing scaling information for the variables in the data.
+* `save_plots::Bool` Indicator of whether to save the plot that is generated.
+* `show_plots::Bool` Indicator of whether to display the plot that is generated.
+* `mdl_apnd::String` String to append to the front of the saved plot's file name.
+"""
+function plot_disc!(delta::Array{Float64},x_coords::Array{Float64},scales::Scaling,
+            save_plots::Bool,show_plots::Bool,mdl_apnd::String)
+
+    p = plot_credible_bounds(delta,x_coords,scales.x)
+    title!("Discrepancy Function")
+    ylabel!(LaTeXString("\$\\delta(\\mathbf{x})\$"))
+
+    save_plots ? Plots.savefig(p,"$(mdl_apnd)_$var-discrepancy_function.png") : nothing
+    show_plots ? Plots.display(p) : nothing
+end
+
+"""
+    plot_disc!(delta::Array{Float64},x_coords::Array{Float64},scales::Scaling,nbins::Int,
+    show_plots::Bool,save_plots::Bool,mdl_apnd::String)
+Function to generate plots for the discrepancy function.
+This implementation generates a histogram and a trace plot.
+
+---
+Positional arguments
+* `delta::Array{Float64}` Array containing the posterior samples of the discrepancy function, each row of the Matrix is a sample of δ.
+* `x_coords::Array{Float64}` Array containing the x coordinates from the experimental data.
+* `scales::Scaling` Struct containing scaling information for the variables in the data.
 * `nbins::Int` The number of bins to use for the histograms.
 * `save_plots::Bool` Indicator of whether to save the plot that is generated.
 * `show_plots::Bool` Indicator of whether to display the plot that is generated.
+* `mdl_apnd::String` String to append to the front of the saved plot's file name.
 """
 function plot_disc!(delta::Array{Float64},x_coords::Array{Float64},scales::Scaling,
-    nbins::Int,save_plots::Bool,show_plots::Bool,mdl_apnd::String)
+            nbins::Int,save_plots::Bool,show_plots::Bool,mdl_apnd::String)
 
     p = plot_credible_bounds(delta,x_coords,scales.x)
     title!("Discrepancy Function")
@@ -504,25 +573,27 @@ function plot_disc!(delta::Array{Float64},x_coords::Array{Float64},scales::Scali
     save_plots ? Plots.savefig(p,"$(mdl_apnd)_$var-discrepancy_function.png") : nothing
     show_plots ? Plots.display(p) : nothing
 
-    #posterior_hist!(permutedims(delta),nbins,"delta",0,save_plots,show_plots,mdl_apnd)
-    #trace_plot!((delta),"delta",0,save_plots,show_plots,mdl_apnd)
+    posterior_hist!(permutedims(delta),nbins,"delta",0,save_plots,show_plots,mdl_apnd)
+    trace_plot!((delta),"delta",0,save_plots,show_plots,mdl_apnd)
 
 end
 
 """
-    plot_prediction!(thetas::Array{Float64},data::BulkVarsStruct,x_coords::Array{Float64},scales::Scaling)
+    plot_prediction!(samples::BulkVarsStruct,data::DataStr,scales::Scaling,
+    save_plots::Bool,show_plots::Bool,mdl_apnd::String)
 Function to plot the surrogate model and data model estimations.
 
 ---
-* `thetas::Array{Float64}` Array of the posterior samples of theta, normalized to the [0,1] interval.
+Positional arguments
 * `samples::BulkVarsStruct` Struct containing non-normalized posterior samples.
 * `data::DataStr` Struct containing the computer simulator and experimental data.
 * `scales::Scaling` Struct containing the minimum and maximum values for each variable.
 * `save_plots::Bool` Indicator of whether to save the plot that is generated.
 * `show_plots::Bool` Indicator of whether to display the plot that is generated.
+* `mdl_apnd::String` String to append to the front of the saved plot's file name.
 """
 function plot_prediction!(samples::BulkVarsStruct,data::DataStr,
-    scales::Scaling,save_plots::Bool,show_plots::Bool,mdl_apnd::String)
+            scales::Scaling,save_plots::Bool,show_plots::Bool,mdl_apnd::String)
     
     exp_resp = unnormalize_var(data.exp.y,scales.y)
 
@@ -583,29 +654,32 @@ function plot_prediction!(samples::BulkVarsStruct,data::DataStr,
     p = plot_credible_bounds(error,data.exp.x,scales.x)
     title!("Data Model Mean Error Estimation")
     ylabel!(LaTeXString("\$\\bar{y}(\\mathbf{x})-[\\eta(\\mathbf{x})+\\delta(\\mathbf{x})]\$"))
-    #if size(exp_resp)[2] > 1
-    #    Plots.scatter!(exp_resp .- mean(exp_resp,dims=2),color=8,label=false)
-    #end
+
 
     save_plots ? Plots.savefig(p,"$(mdl_apnd)_calibrated_model_error.png") : nothing
     show_plots ? Plots.display(p) : nothing
 end
 
 """
-    plot_prediction!(thetas::Array{Float64},data::GriddyPosteriors,x_coords::Array{Float64},scales::Scaling)
+    plot_prediction!(theta_idx::Vector{Int},samples::GriddyPosteriors,x_coords::Array{Float64},
+    grid_resp::Array{Float64,2},data::DataStr,scales::Scaling,save_plots::Bool,
+    show_plots::Bool,mdl_apnd::String)
 Function to plot the surrogate model and data model estimations.
 
 ---
-* `thetas::Array{Float64}` Array of the posterior samples of theta, normalized to the [0,1] interval.
+Positional arguments
+* `theta_idx::Vector{Int}` Sampled indices of theta from the griddy Gibbs sampler.
 * `samples::GriddyPosteriors` Struct containing non-normalized posterior samples.
+* `grid_resp::Array{Float64,2}` Matrix of grid responses.
 * `data::DataStr` Struct containing the computer simulator and experimental data.
 * `scales::Scaling` Struct containing the minimum and maximum values for each variable.
 * `save_plots::Bool` Indicator of whether to save the plot that is generated.
 * `show_plots::Bool` Indicator of whether to display the plot that is generated.
+* `mdl_apnd::String` String to append to the front of the saved plot's file name.
 """
 function plot_prediction!(theta_idx::Vector{Int},samples::GriddyPosteriors,
-    grid_resp::Array{Float64},data::DataStr,scales::Scaling,
-    save_plots::Bool,show_plots::Bool,mdl_apnd::String)
+            grid_resp::Array{Float64,2},data::DataStr,scales::Scaling,
+            save_plots::Bool,show_plots::Bool,mdl_apnd::String)
     
     nloc = size(data.exp.y)[1]
     nx = size(data.exp.x)[2]
@@ -679,7 +753,7 @@ end
 Function to get the mean, median, and 95% credible bounds of a set of posterior samples.
 
 ---
-Keyword arguments
+Positional arguments
 * `data::Vector{Float64}`
 
 ---
@@ -696,14 +770,15 @@ function get_estimates(data::Vector{Float64})
 end
 
 """
-    make_estimate_table(samples::BulkVarsStruct,nx::Int,ntheta::Int)
+    make_estimate_table(samples::BulkVarsStruct,nx::Int,ntheta::Int,mdl_apnd::String)
 Function to make the table of estimates from the posterior samples.
 
 ---
-Keyword arguments
+Positional arguments
 * `samples::BulkVarsStruct` struct containing the posterior samples from the continuous sampler.
 * `nx::Int` number of x variables.
 * `ntheta::Int` number of theta variables.
+* `mdl_apnd::String` String to append to the front of the saved plot's file name.
 """
 function make_estimate_table(samples::BulkVarsStruct,nx::Int,ntheta::Int,mdl_apnd::String)
     if nx > 0
@@ -714,16 +789,16 @@ function make_estimate_table(samples::BulkVarsStruct,nx::Int,ntheta::Int,mdl_apn
         estimates[:,end-1] = get_estimates(samples.tau2)
         var_labs_tex = vcat(["Value"],[LaTeXString("\$\\rho_{$i}\$") for i in 1:nx],
             [LaTeXString("\$\\theta_{$j}\$") for j in 1:ntheta],
-            [LaTeXString("\$\\sigma\$"),LaTeXString("\$\\tau\$")])
+            [LaTeXString("\$\\tau\$"),LaTeXString("\$\\sigma\$")])
         var_labs = vcat(["Value"],["ρ $i" for i in 1:nx],
             ["θ $j" for j in 1:ntheta],
-            ["σ","τ"])
+            ["τ","σ"])
     else
         estimates = Array{Float64}(undef,4,ntheta+3)
         var_labs_tex = vcat(["Value"],[LaTeXString("\$\\theta_{$j}\$") for j in 1:ntheta],
-            [LaTeXString("\$\\tau\$")])
+            [LaTeXString("\$\\sigma\$")])
         var_labs = vcat(["Value"],["θ $j" for j in 1:ntheta],
-        ["τ"])
+        ["σ"])
     end
     for i in 1:ntheta
         estimates[:,i+nx+1] = get_estimates(samples.theta[:,i])
@@ -745,32 +820,33 @@ function make_estimate_table(samples::BulkVarsStruct,nx::Int,ntheta::Int,mdl_apn
 end
 
 """
-    make_estimate_table!(samples::GriddyPosteriors,nx::Int,ntheta::Int)
+    make_estimate_table!(samples::GriddyPosteriors,nx::Int,ntheta::Int,mdl_apnd::String)
 Function to make the table of estimates from the posterior samples.
 
 ---
-Keyword arguments
+Positional arguments
 * `samples::GriddyPosteriors` struct containing the posterior samples from the griddy Gibbs sampler.
 * `nx::Int` number of x variables.
 * `ntheta::Int` number of theta variables.
+* `mdl_apnd::String` String to append to the front of the saved plot's file name.
 """
 function make_estimate_table(samples::GriddyPosteriors,nx::Int,ntheta::Int,mdl_apnd::String)
     if nx > 0
         estimates = Array{Float64}(undef,4,ntheta+4)
         estimates[:,2] = get_estimates(samples.rho)
-        estimates[:,end-1] = get_estimates(samples.sig_star2)
+        estimates[:,end-1] = get_estimates(samples.phi)
         var_labs_tex = vcat(["Value"],[LaTeXString("\$\\rho\$")],
             [LaTeXString("\$\\theta_{$j}\$") for j in 1:ntheta],
-            [LaTeXString("\$\\sigma\$"),LaTeXString("\$\\tau\$")])
+            [LaTeXString("\$\\tau\$"),LaTeXString("\$\\sigma\$")])
         var_labs = vcat(["Value"],["ρ"],
             ["θ $j" for j in 1:ntheta],
-            ["σ","τ"])
+            ["τ","σ"])
     else
         estimates = Array{Float64}(undef,4,ntheta+3)
         var_labs_tex = vcat(["Value"],[LaTeXString("\$\\theta_{$i}\$") for j in 1:ntheta],
-            [LaTeXString("\$\\tau\$")])
+            [LaTeXString("\$\\sigma\$")])
         var_labs = vcat(["Value"],["θ $j" for j in 1:ntheta],
-            ["τ"])
+            ["σ"])
     end
     for i in 1:ntheta
         estimates[:,i+2] = get_estimates(samples.theta[:,i])
@@ -792,28 +868,39 @@ function make_estimate_table(samples::GriddyPosteriors,nx::Int,ntheta::Int,mdl_a
 end
 
 """
-    post_process(samples::BulkVarsStruct,nx::Int,ntheta::Int,nburn::Int,scales::Scaling,make_plots::Bool,save_plots::Bool,show_plots::Bool)
-    post_process(samples::BulkVarsStruct,nx::Int,ntheta::Int,nburn::Int,scales::Scaling,make_plots::Bool,save_plots::Bool,show_plots::Bool,nbins::Int,nthin::Int)
+    post_process(samples::BulkVarsStruct,data::DataStr,nx::Int,ntheta::Int,nburn::Int,
+    scales::Scaling)
+    post_process(samples::BulkVarsStruct,data::DataStr,nx::Int,ntheta::Int,nburn::Int,
+    scales::Scaling;make_plots::Bool,save_plots::Bool,show_plots::Bool,
+    nbins::Int,nthin::Int,mdl_apnd::String)
 Wrapper function to post-process the posterior samples.
 
 ---
-Keyword arguments
+Positional arguments
 * `samples::BulkVarsStruct` Struct containing the posterior samples.
+* `data::DataStr` Struct containing the computer simulator and experimental data.
 * `nx::Int` Number of x dimensions.
 * `ntheta::Int` number of θ dimensions.
 * `nburn::Int` The number of samples to burn.
+* `scales::Scalint` Struct containing the scaling information for the data.
+
+Keyword arguments
 * `make_plots::Bool` Indicator of whether to make plots.
+  * default value of true
 * `save_plots::Bool` Indicator of whether to save the plots.
+  * default value of true
 * `show_plots::Bool` Indicator of whether to show the plots.
-Optional arguments
+  * default value of true
 * `nthin::Int` The number of samples to skip when thinning.
-  * default value of 20
+  * default value of 5
 * `nbins::Int` The number of bins to use for histograms.
   * default value of 30
+* `mdl_apnd::String` String to append to the front of the generated plots' file names.
+  * default value of ""
 """
 function post_process(samples::BulkVarsStruct,data::DataStr,nx::Int,ntheta::Int,
     nburn::Int,scales::Scaling;make_plots::Bool=true,save_plots::Bool=true,
-    show_plots::Bool=true,nthin::Int=20,nbins::Int=30,mdl_apnd::String="")
+    show_plots::Bool=true,nthin::Int=5,nbins::Int=30,mdl_apnd::String="")
     
     samples = remove_burn(samples,nburn)
     samples = thin_samples(samples,nthin)
@@ -821,10 +908,10 @@ function post_process(samples::BulkVarsStruct,data::DataStr,nx::Int,ntheta::Int,
     sqrt_variance!(scaled_samples)
 
     if make_plots
-        posterior_hist!(scaled_samples.sig2,nbins,"tau",0,save_plots,show_plots,mdl_apnd)
-        trace_plot!(scaled_samples.sig2,"tau",0,save_plots,show_plots,mdl_apnd)
-        posterior_hist!(scaled_samples.tau2,nbins,"sigma",0,save_plots,show_plots,mdl_apnd)
-        trace_plot!(scaled_samples.tau2,"sigma",0,save_plots,show_plots,mdl_apnd)
+        posterior_hist!(scaled_samples.sig2,nbins,"sigma",0,save_plots,show_plots,mdl_apnd)
+        trace_plot!(scaled_samples.sig2,"sigma",0,save_plots,show_plots,mdl_apnd)
+        posterior_hist!(scaled_samples.tau2,nbins,"tau",0,save_plots,show_plots,mdl_apnd)
+        trace_plot!(scaled_samples.tau2,"tau",0,save_plots,show_plots,mdl_apnd)
         #plot_correlation(samples.theta,"theta",save_plots,show_plots,mdl_apnd)
         for theta in 1:ntheta
             posterior_hist!(scaled_samples.theta[:,theta],nbins,"theta",
@@ -848,29 +935,45 @@ function post_process(samples::BulkVarsStruct,data::DataStr,nx::Int,ntheta::Int,
 end
 
 """
-    post_process(samples::BulkVarsStruct,nx::Int,ntheta::Int,nburn::Int,scales::Scaling,make_plots::Bool,save_plots::Bool,show_plots::Bool)
-    post_process(samples::BulkVarsStruct,nx::Int,ntheta::Int,nburn::Int,scales::Scaling,make_plots::Bool,save_plots::Bool,show_plots::Bool,nbins::Int,nthin::Int)
+    post_process(samples::GriddyVarsStruct,data::DataStr,nx::Int,ntheta::Int,nburn::Int,
+    scales::Scaling,theta_grid::Array{Float64,2},sig_grid::Union{Nothing,Array{Float64,2}},
+    grid_resp::Array{Float64,2})
+    post_process(samples::GriddyVarsStruct,data::DataStr,nx::Int,ntheta::Int,nburn::Int,
+    scales::Scaling,theta_grid::Array{Float64,2},sig_grid::Union{Nothing,Array{Float64,2}},
+    grid_resp::Array{Float64,2};make_plots::Bool,save_plots::Bool,show_plots::Bool,
+    nbins::Int,nthin::Int,mdl_apnd::String)
 Wrapper function to post-process the posterior samples.
 
 ---
-Keyword arguments
-* `samples::BulkVarsStruct` Struct containing the posterior samples.
+Positional arguments
+* `samples::GriddyVarsStruct` Struct containing the posterior samples.
+* `data::DataStr` Struct containing the computer simulator and experimental data.
 * `nx::Int` Number of x dimensions.
 * `ntheta::Int` number of θ dimensions.
 * `nburn::Int` The number of samples to burn.
+* `scales::Scalint` Struct containing the scaling information for the data.
+* `theta_grid::Array{Float64,2}` Matrix of theta grid values.
+* `sig_grid::Union{Nothing,Array{Float64,2}}` Matrix of integrated discrepancy covaraince grid values.
+* `grid_resp::Array{Float64,2}` Responses of the surrogate model corresponding `theta_grid`.
+
+Keyword arguments
 * `make_plots::Bool` Indicator of whether to make plots.
+  * default value of true
 * `save_plots::Bool` Indicator of whether to save the plots.
+  * default value of true
 * `show_plots::Bool` Indicator of whether to show the plots.
-Optional arguments
+  * default value of true
 * `nthin::Int` The number of samples to skip when thinning.
-  * default value of 20
+  * default value of 5
 * `nbins::Int` The number of bins to use for histograms.
   * default value of 30
+* `mdl_apnd::String` String to append to the front of the generated plots' file names.
+  * default value of ""
 """
 function post_process(samples::GriddyVarsStruct,data::DataStr,nx::Int,ntheta::Int,
-    nburn::Int,scales::Scaling,theta_grid::Array{Float64},sig_grid::Array{Float64},
-    grid_resp::Array{Float64};make_plots::Bool=true,save_plots::Bool=true,
-    show_plots::Bool=true,nthin::Int=20,nbins::Int=30,mdl_apnd::String="")
+            nburn::Int,scales::Scaling,theta_grid::Array{Float64},sig_grid::Union{Nothing,Array{Float64}},
+            grid_resp::Array{Float64};make_plots::Bool=true,save_plots::Bool=true,
+            show_plots::Bool=true,nthin::Int=20,nbins::Int=30,mdl_apnd::String="")
 
     scaled_samples = normalize_samples(samples,scales,theta_grid,
         sig_grid,true)
@@ -881,10 +984,10 @@ function post_process(samples::GriddyVarsStruct,data::DataStr,nx::Int,ntheta::In
     sqrt_variance!(scaled_samples)
 
     if make_plots
-        posterior_hist!(scaled_samples.sig2,nbins,"tau",0,save_plots,show_plots,mdl_apnd)
-        trace_plot!(scaled_samples.sig2,"tau",0,save_plots,show_plots,mdl_apnd)
-        posterior_hist!(scaled_samples.sig_star2,nbins,"sigma",0,save_plots,show_plots,mdl_apnd)
-        trace_plot!(scaled_samples.sig_star2,"sigma",0,save_plots,show_plots,mdl_apnd)
+        posterior_hist!(scaled_samples.sig2,nbins,"sigma",0,save_plots,show_plots,mdl_apnd)
+        trace_plot!(scaled_samples.sig2,"sigma",0,save_plots,show_plots,mdl_apnd)
+        posterior_hist!(scaled_samples.sig_star2,nbins,"tau",0,save_plots,show_plots,mdl_apnd)
+        trace_plot!(scaled_samples.sig_star2,"tau",0,save_plots,show_plots,mdl_apnd)
         #plot_correlation(samples.theta,"theta",save_plots,show_plots,mdl_apnd)
         for theta in 1:ntheta
             posterior_hist!(scaled_samples.theta[:,theta],nbins,"theta",
