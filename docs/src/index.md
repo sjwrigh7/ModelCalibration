@@ -1,14 +1,14 @@
 ```@meta
 CurrentModule = ModelCalibration
 ```
-
 # ModelCalibration
-
-Documentation for [ModelCalibration](https://not-public/Stephen Wright/ModelCalibration.jl).
-
+## Table of Contents
+```@contents
+Pages = ["steup.md","griddy.md","traditional.md"]
+```
+## Index
 ```@index
 ```
 
-```@autodocs
-Modules = [ModelCalibration]
-```
+
+Documentation for `ModelCalibration` **NOT PUBLICLY RELEASED**.
