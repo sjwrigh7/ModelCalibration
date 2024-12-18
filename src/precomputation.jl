@@ -26,20 +26,20 @@ function scaled_sse(y_hat::Vector{Float64},sigma_inv::Array{Float64},y_bar::Vect
 end
 
 """
-    scaled_sse(y_hat::Vector{Float64},y::Array{Float64,2})
+    scaled_sse(y_hat::Vector{Float64},y::Array{Float64})
 Function to calculate the exponent in the likelihood function.
 Implementation for a univariate normal distribution data model.
 
 ---
 Positional arguments
 * `y_hat::Vector{Float64}` A Vector of length n containing the computer model's estimates of the experimental responses for a setting of θ.
-* `y::Array{Float64,2}` A Vector of length n containing the experimental responses.
+* `y::Array{Float64}` A Vector of length n containing the experimental responses.
 
 ---
 Returns
 * `sse::Float64` A scalar Float describing the sum of squared error between `y_hat` and `y`.
 """
-function scaled_sse(y_hat::Float64,y::Array{Float64,2})
+function scaled_sse(y_hat::Float64,y::Array{Float64})
     sse = sum((y_hat .- y).^2)
     return sse
 end
@@ -133,7 +133,7 @@ function precompute!(grid_response::Array{Float64,2},data::DataStr,c_sse::Array{
         for i in 1:size(sig_design)[1] #loop over ρ
             rho_vec = repeat([sig_design[i,j,1]],nx)
             sigma .= ident .+ sig_design[i,j,2]*correlation_construct(rho_vec,data.exp.x,nx,nloc)
-            sig_det[i,j] = log(det(sigma)^(-nobs/2))
+            sig_det[i,j] = log(det(sigma)^(-nloc/2))
             sig_inv .= inv(sigma)
             for k in 1:size(grid_response)[1]
                 c_sse[k,i,j] = scaled_sse(grid_response[k,:],sig_inv,y_bar,nreps)

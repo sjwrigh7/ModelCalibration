@@ -138,7 +138,7 @@ function griddy_gibbs!(data::DataStr,sample_vals::GriddyVarsStruct,c_sse::Vector
         sig2_inv = 1/sig2
 
         #calculate the log-likelihood of θ and store in pre-allocated arrays
-        loglik_theta!(c_sse[:,rho,phi],sig2_inv,loglik_theta)
+        loglik_theta!(c_sse,sig2_inv,loglik_theta)
         
         #calculate proportional posterior of θ
         #this calculation would go on this line a non-uniform prior is specified

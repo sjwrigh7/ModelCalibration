@@ -45,7 +45,7 @@ function setup(design_raw::Array{Float64},simobs_raw::Vector{Float64},
 
     if nx > 0                                                          # calculate number of unique observation settings in data (checks for univariate and multivariate data)
         nloc = size(unique(design_raw[:,1:nx],dims=1))[1]       
-    else
+    elseif nx == 0
         nloc = 1
     end
     

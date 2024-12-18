@@ -36,9 +36,9 @@ end
 
 """
     normalize_samples(samples::GriddyVarsStruct,scales::Scaling,theta_grid::Array{Float64},
-    sig_grid::Array{Float64})
+    sig_grid::Union{Nothing,Array{Float64}})
     normalize_samples(samples::GriddyVarsStruct,scales::Scaling,theta_grid::Array{Float64},
-    sig_grid::Array{Float64},rev::Bool)
+    sig_grid::Union{Nothing,Array{Float64}},rev::Bool)
 Function to normalize or reverse the normalization of the posterior samples.
 This implementation is for the griddy Gibbs sampler.
 
@@ -47,7 +47,7 @@ Positional arguments
 * `samples::GriddyVarsStruct` Struct containing the posterior samples (in index form) from the griddy Gibbs sampler.
 * `scales::Scaling` Struct containing the minimum and maximum values for each variables.
 * `theta_grid::Array{Float64}` Array containing the sampling grid for θ that was used for the griddy Gibbs sampler.
-* `sig_grid::Array{Float64}` Array containing the sampling grid for the proportional covariance matrix used for the griddy Gibbs sampler.
+* `sig_grid::Union{Nothing,Array{Float64}}` Array containing the sampling grid for the proportional covariance matrix used for the griddy Gibbs sampler.
 Optional arguments
 * `rev::Bool` Indicator of whether to reverse the normalization or not.
   * default value of true.
@@ -57,16 +57,20 @@ Returns
 * `converted_samples::GriddyPosteriors` A struct containing the real value samples from the griddy Gibbs sampler.
 """
 function normalize_samples(samples::GriddyVarsStruct,scales::Scaling,theta_grid::Array{Float64},
-    sig_grid::Array{Float64},rev::Bool=true)
+    sig_grid::Union{Nothing,Array{Float64}},rev::Bool=true)
 
-    theta = rev ? unnormalize_var(theta_grid[samples.theta],scales.theta) :
-        normalize_var(design[samples.theta],scales.theta)
+    theta = rev ? unnormalize_var(theta_grid[samples.theta,:],scales.theta) :
+        normalize_var(design[samples.theta,:],scales.theta)
     sig2 = rev ? (unnormalize_var(sqrt.(samples.sig2),scales.y) .- scales.y.min).^2 :
     (normlize_var(sqrt.(samples.sig2 .+ scales.y.min),scales.y)).^2
-    rho = sig_grid[samples.rho,1,1]
-    sig_star2 = sig_grid[1,samples.sig_star2,2] .* sig2
-
-    converted_samples = GriddyPosteriors(theta=theta,sig2=sig2,rho=rho,sig_star2=sig_star2)
+    if typeof(sig_grid) == Nothing
+        rho = repeat([0.0],length(samples.rho))
+        phi = repeat([0.0],length(samples.phi))
+    else
+        rho = sig_grid[samples.rho,1,1]
+        phi = sig_grid[1,samples.phi,2] .* sig2
+    end
+    converted_samples = GriddyPosteriors(theta=theta,sig2=sig2,rho=rho,phi=phi)
 
     return converted_samples
 end
@@ -144,10 +148,10 @@ function remove_burn(samples::GriddyPosteriors,nburn::Int)
     retained = keep:length(samples.sig2)
     theta = samples.theta[retained,:]
     sig2 = samples.sig2[retained]
-    sig_star2 = samples.sig_star2[retained]
+    phi = samples.phi[retained]
     rho = samples.rho[retained]
 
-    truncated = GriddyPosteriors(theta=theta,sig2=sig2,sig_star2=sig_star2,
+    truncated = GriddyPosteriors(theta=theta,sig2=sig2,phi=phi,
         rho=rho)
 
     return truncated
@@ -183,10 +187,10 @@ function remove_burn(samples::GriddyVarsStruct,nburn::Int)
     retained = keep:length(samples.sig2)
     theta = samples.theta[retained]
     sig2 = samples.sig2[retained]
-    sig_star2 = samples.sig_star2[retained]
+    phi = samples.phi[retained]
     rho = samples.rho[retained]
 
-    truncated = GriddyVarsStruct(theta=theta,sig2=sig2,sig_star2=sig_star2,
+    truncated = GriddyVarsStruct(theta=theta,sig2=sig2,phi=phi,
         rho=rho)
 
     return truncated
@@ -280,9 +284,9 @@ function thin_samples(samples::GriddyPosteriors,nthin::Int)
     theta = samples.theta[retained,:]
     rho = samples.rho[retained]
     sig2 = samples.sig2[retained]
-    sig_star2 = samples.sig_star2[retained]
+    phi = samples.phi[retained]
     
-    thinned = GriddyPosteriors(theta=theta,rho=rho,sig2=sig2,sig_star2=sig_star2)
+    thinned = GriddyPosteriors(theta=theta,rho=rho,sig2=sig2,phi=phi)
     
     return thinned
 end
@@ -325,9 +329,9 @@ function thin_samples(samples::GriddyVarsStruct,nthin::Int)
     theta = samples.theta[retained]
     rho = samples.rho[retained]
     sig2 = samples.sig2[retained]
-    sig_star2 = samples.sig_star2[retained]
+    phi = samples.phi[retained]
     
-    thinned = GriddyVarsStruct(theta=theta,rho=rho,sig2=sig2,sig_star2=sig_star2)
+    thinned = GriddyVarsStruct(theta=theta,rho=rho,sig2=sig2,phi=phi)
     
     return thinned
 end
@@ -357,7 +361,7 @@ Keyword arguments
 """
 function sqrt_variance!(samples::GriddyPosteriors)
     samples.sig2 .= sqrt.(samples.sig2)
-    samples.sig_star2 .= sqrt.(samples.sig_star2)
+    samples.phi .= sqrt.(samples.phi)
 end
 
 """
@@ -705,7 +709,7 @@ function plot_prediction!(theta_idx::Vector{Int},samples::GriddyPosteriors,
     for i in axes(error_samples)[1]
         rho_vec = repeat([samples.rho[i]],nx)
         corr = correlation_construct(rho_vec,data.exp.x,nx,nloc)
-        sigma .= samples.sig2[i] .* (identity) .+ samples.sig_star2[i] .*
+        sigma .= samples.sig2[i] .* (identity) .+ samples.phi[i] .*
             corr
         error_samples[i,:] .= rand(MvNormal(sigma),1)
     end
@@ -794,7 +798,7 @@ function make_estimate_table(samples::BulkVarsStruct,nx::Int,ntheta::Int,mdl_apn
             ["θ $j" for j in 1:ntheta],
             ["τ","σ"])
     else
-        estimates = Array{Float64}(undef,4,ntheta+3)
+        estimates = Array{Float64}(undef,4,ntheta+2)
         var_labs_tex = vcat(["Value"],[LaTeXString("\$\\theta_{$j}\$") for j in 1:ntheta],
             [LaTeXString("\$\\sigma\$")])
         var_labs = vcat(["Value"],["θ $j" for j in 1:ntheta],
@@ -842,14 +846,15 @@ function make_estimate_table(samples::GriddyPosteriors,nx::Int,ntheta::Int,mdl_a
             ["θ $j" for j in 1:ntheta],
             ["τ","σ"])
     else
-        estimates = Array{Float64}(undef,4,ntheta+3)
-        var_labs_tex = vcat(["Value"],[LaTeXString("\$\\theta_{$i}\$") for j in 1:ntheta],
+        estimates = Array{Float64}(undef,4,ntheta+2)
+        var_labs_tex = vcat(["Value"],[LaTeXString("\$\\theta_{$j}\$") for j in 1:ntheta],
             [LaTeXString("\$\\sigma\$")])
         var_labs = vcat(["Value"],["θ $j" for j in 1:ntheta],
             ["σ"])
     end
+    skip = Int( nx > 0 )
     for i in 1:ntheta
-        estimates[:,i+2] = get_estimates(samples.theta[:,i])
+        estimates[:,i+1+skip] = get_estimates(samples.theta[:,i])
     end
     estimates[:,end] = get_estimates(samples.sig2)
     param_labs = ["95% Lower Bound","Median","Mean","95% Upper Bound"]
@@ -927,7 +932,7 @@ function post_process(samples::BulkVarsStruct,data::DataStr,nx::Int,ntheta::Int,
                 trace_plot!(scaled_samples.rho[:,rho],"rho",rho,
                     save_plots,show_plots,mdl_apnd)
             end
-            plot_disc!(scaled_samples.delta,data.exp.x,scales,nbins,save_plots,show_plots,mdl_apnd)
+            plot_disc!(scaled_samples.delta,data.exp.x,scales,save_plots,show_plots,mdl_apnd)
             plot_prediction!(scaled_samples,data,scales,save_plots,show_plots,mdl_apnd)
         end
     end
@@ -986,8 +991,7 @@ function post_process(samples::GriddyVarsStruct,data::DataStr,nx::Int,ntheta::In
     if make_plots
         posterior_hist!(scaled_samples.sig2,nbins,"sigma",0,save_plots,show_plots,mdl_apnd)
         trace_plot!(scaled_samples.sig2,"sigma",0,save_plots,show_plots,mdl_apnd)
-        posterior_hist!(scaled_samples.sig_star2,nbins,"tau",0,save_plots,show_plots,mdl_apnd)
-        trace_plot!(scaled_samples.sig_star2,"tau",0,save_plots,show_plots,mdl_apnd)
+        
         #plot_correlation(samples.theta,"theta",save_plots,show_plots,mdl_apnd)
         for theta in 1:ntheta
             posterior_hist!(scaled_samples.theta[:,theta],nbins,"theta",
@@ -996,6 +1000,8 @@ function post_process(samples::GriddyVarsStruct,data::DataStr,nx::Int,ntheta::In
                 theta,save_plots,show_plots,mdl_apnd)
         end
         if nx > 0
+            posterior_hist!(scaled_samples.phi,nbins,"tau",0,save_plots,show_plots,mdl_apnd)
+            trace_plot!(scaled_samples.phi,"tau",0,save_plots,show_plots,mdl_apnd)
             #plot_correlation(samples.rho,"rho",save_plots,show_plots,mdl_apnd)
             posterior_hist!(scaled_samples.rho,nbins,"rho",0,
                 save_plots,show_plots,mdl_apnd)

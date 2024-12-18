@@ -50,20 +50,20 @@ function find_lik_asymptote(model,data::DataStr,theta::Vector{Float64},
         theta_delta = copy(theta)
 
         #while loop for change in likelihood and magnitude of likelihood
-        while((epsilon > convergence) || (new_lik > (0.5*max_lik)))
+        while ((epsilon > convergence) || (lik_vals[2] > (0.5*max_lik))) && (theta_delta[i] < 1.0)
             #set old likelihood to last iteration's new likelihood
-            lik_vals[1] .= lik_vals[2]
+            lik_vals[1] = lik_vals[2]
             #increment theta
             theta_delta[i] += delta
             #calculate new likelihood
             response = predict_y_all(theta_delta,model)
-            lik_vals[2] .= prod(pdf(MvNormal(response,covar),data.exp.y))[1]
+            lik_vals[2] = prod(pdf(MvNormal(response,covar),data.exp.y))[1]
             
             #calculate change in likelihood
             epsilon = abs(lik_vals[2] - lik_vals[1])/max_lik
 
             #store current value of theta
-            upper_bounds[i] .= theta_delta[i]
+            upper_bounds[i] = theta_delta[i]
         end
 
         #calculate lower bounds
@@ -73,20 +73,20 @@ function find_lik_asymptote(model,data::DataStr,theta::Vector{Float64},
         
         #set theta values to MLE
         theta_delta = copy(theta)
-        while((epsilon > convergence) || new_lik > (0.5*max_lik))
+        while ((epsilon > convergence) || lik_vals[2] > (0.5*max_lik)) && (theta_delta[i] > 0.0)
             #set old likelihood to last iteration's new likelihood
-            lik_vals[1] .= lik_vals[2]
+            lik_vals[1] = lik_vals[2]
             #increment theta
             theta_delta[i] -= delta
             #calculate new likelihood
             response = predict_y_all(theta_delta,model)
-            lik_vals[2] .= prod(pdf(MvNormal(response,covar),data.exp.y))[1]
+            lik_vals[2] = prod(pdf(MvNormal(response,covar),data.exp.y))[1]
             
             #calculate change in likelihood
             epsilon = abs(lik_vals[2] - lik_vals[1])/max_lik
 
             #store current value of theta
-            upper_bounds[i] .= theta_delta[i]
+            upper_bounds[i] = theta_delta[i]
         end
     end
     return upper_bounds,lower_bounds
@@ -177,6 +177,8 @@ Keyword arguments
   * default value of 1E-3
 * `convergence::Float64` Convergence criteria for algorithm. When the cange in likelihood divided by the maximum likelihood is less than this value, the algorithm will terminate.
   * default value of 1E-12
+* `epochs::Int` The number of epochs for optimizing in the MLE evaluation.
+  * default value of 7000
 ---
 Returns
 * `doe::Array{Float64,2}` The sampling grid for θ to use for the griddy Gibbs sampler.
@@ -189,12 +191,12 @@ During this step, the θ values closest to the θ MLEs that generate asymptotic 
 With these bounds for θ solved, a full factorial, uniform grid DOE is generated over the bounds of θ.
 """
 function generate_sample_grid(n::Int,data::DataStr,nx::Int,ntheta::Int,model;
-            delta::Float64=1e-3,convergence::Float64=1e-12)
-    
+            delta::Float64=1e-3,convergence::Float64=1e-12,epochs::Int=7000)
+    println(size(data.exp.y))
     nloc = size(data.exp.y)[1]
     #get MLE for theta and covar
-    theta_mle,covar_mle = get_mle(data,nx,nloc,ntheta;epochs=epochs,model=model)
-    bounds = find_lik_asymptote(data,theta_mle,covar_mle,delta,model)
+    theta_mle,covar_mle = get_mle(data,nx,nloc,ntheta,model;epochs=epochs)
+    bounds = find_lik_asymptote(model,data,theta_mle,covar_mle;delta=delta,convergence=convergence)
     #generate theta grid using bounds
     doe = get_full_fact(n,ntheta,bounds)
     #predict surrogate model for each point in theta grid

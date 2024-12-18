@@ -57,14 +57,16 @@ function mcmc!(model,data::DataStr,prior_data::PriorData,
                 theta_step = metropolis_theta(model,prior_data,data,
                     theta,sig2,j,stepsize.theta[j])
                 #store values
-                theta[j] = theta_step.new_value
+                eta = theta_step[2]
+                theta[j] = theta_step[1].new_value
                 sample_vals.theta[i,j] = theta[j]
-                sample_vals.accept[i,j+nx] = theta_step.accept
-                sample_vals.ratio[i,j+nx] = theta_step.ratio
+                sample_vals.accept[i,j+nx] = theta_step[1].accept
+                sample_vals.ratio[i,j+nx] = theta_step[1].ratio
             end
+            sample_vals.eta[i] = eta
 
-            #gibbs update for τ^2
-            sig2 = gibbs_sig2(prior_data,data,eta,delta,lik_power,nrep)
+            #gibbs update for σ^2
+            sig2 = gibbs_sig2(prior_data,data,eta,nrep)
             sample_vals.sig2[i] = sig2
         end
 

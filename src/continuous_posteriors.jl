@@ -85,10 +85,10 @@ function metropolis_theta(model,prior_data::PriorData,data::DataStr,
     prop_theta = expit(c1,c2,prop_gamma)   #transform back to theta
 
     eta_current = predict_y_all(theta,model)
-    log_lik_current = loglik(data,delta,sig2,eta_current,nloc)[1]
+    log_lik_current = loglik(data,delta,sig2,eta_current)[1]
     theta[k] = prop_theta     #replace theta at index k with prop val
     eta_prop = predict_y_all(theta,model)
-    log_lik_prop = loglik(data,delta,sig2,eta_prop,nloc)[1] #calc likelihood
+    log_lik_prop = loglik(data,delta,sig2,eta_prop)[1] #calc likelihood
     #calculate jump distribution values
     log_jump_current = logpdf(Normal(current_gamma,stepsize),prop_gamma)+
     log(abs(-(c1)/((prop_theta+c2)*(-c1+prop_theta+c2))))
@@ -148,11 +148,11 @@ function metropolis_theta(model,prior_data::PriorData,data::DataStr,
     prop_gamma = rand(Normal(current_gamma,stepsize)) #propose new gamma
     prop_theta = expit(c1,c2,prop_gamma)   #transform back to theta
 
-    eta_current = predict_y_all(theta,model)
-    log_lik_current = loglik(data,eta_current,sig2,nloc)[1]
+    eta_current = predict_y_all(theta,model)[1]
+    log_lik_current = loglik(data,eta_current,sig2)[1]
     theta[k] = prop_theta     #replace theta at index k with prop val
-    eta_prop = predict_y_all(theta,model)
-    log_lik_prop = loglik(data,eta_prop,sig2,nloc)[1] #calc likelihood
+    eta_prop = predict_y_all(theta,model)[1]
+    log_lik_prop = loglik(data,eta_prop,sig2)[1] #calc likelihood
     #calculate jump distribution values
     log_jump_current = logpdf(Normal(current_gamma,stepsize),prop_gamma)+
     log(abs(-(c1)/((prop_theta+c2)*(-c1+prop_theta+c2))))
@@ -280,9 +280,10 @@ end
     gibbs_sig2(prior_data::PriorData,data::DataStr,eta::Vector{Float64},delta::Vector{Float64},
     lik_power::Int,nrep::Int)
 Function to draw a sample from the posterior distribution of the data model variance term (σ^2).
+Implementation for a multivariate normal distribution.
 
 ---
-Keyword arguments
+Positional arguments
 * `prior_data::PriorData` Data structure containing the prior distribution parameters.
 * `data::DataStr` Data structure containing the computer simulator and experimental data.
 * `eta::Vector{Float64},` Vector containing surrogate model prediction.
@@ -317,6 +318,43 @@ function gibbs_sig2(prior_data::PriorData,data::DataStr,
     par2 = prior_data.sig2.par2 + 0.5*sum(sse)
 
     sample = rand(InverseGamma(par1,par2))      #sample from posterior
+    return sample
+end
+
+"""
+    gibbs_sig2(prior_data::PriorData,data::DataStr,eta::Float64,nrep::Int)
+Function to draw a sample from the posterior distribution of the data model variance term (σ^2).
+Implementation for a univariate normal distribution.
+
+---
+Positional arguments
+* `prior_data::PriorData` Data structure containing the prior distribution parameters.
+* `data::DataStr` Data structure containing the computer simulator and experimental data.
+* `eta::Float64,` Surrogate model prediction.
+* `nrep::Int` The number of independent observations of the multivariate normal distribution data model.
+
+---
+Returns
+* `sample` A scalar float containing the new sample of σ^2 from its posterior distribution.
+
+---
+Details
+The full conditional distribution of σ^2 is proportional to a normal likelihood function multiplied by an inverse gamma distribution (the σ^2 prior distribution).
+This can be simplified to a well known inverse gamma posterior distribution form for Gibbs updates.
+Given prior distribution parameters for σ^2 of IG(α,β) and likelihood function of ∏^m(N(η,σ^2)), the posterior distribution is solved as the following:
+p(τ^2|.) ∼ IG(α+m/2,β+0.5*SSE)
+Where m is the number of independent observations from this data model, and SSE is the sum of squared errors between the data and the surrogate model.
+
+"""
+function gibbs_sig2(prior_data::PriorData,data::DataStr,
+            eta::Float64,nrep::Int)
+    
+    par1 = prior_data.sig2.par1 + 0.5*nrep
+
+    sse = sum((data.exp.y .- eta).^2)
+    par2 = prior_data.sig2.par2 + 0.5*sse
+
+    sample = rand(InverseGamma(par1,par2))
     return sample
 end
 

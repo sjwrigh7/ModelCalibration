@@ -191,14 +191,14 @@ function lik(data::DataStr,theta::Vector{Float64},sig2::Float64,model)
 end
 
 """
-    lik(data::DataStr,eta::Vector{Float64},sig2::Float64)
+    lik(data::DataStr,eta::Float64,sig2::Float64)
 Function to evaluate the data model's likelihood function.
 Implementation for a univariate normal distribution data model where the surrogate model's estimate is already known.
 
 ---
 Positional arguments
 * `data::DataStr` A data structure containing the computer simulator and experimental data.
-* `eta::Vector{Float64}` Vector of theta sample values.
+* `eta::Float64` Vector of theta sample values.
 * `sig2::Float64` Data model error variance sample.
 
 ---
@@ -213,7 +213,7 @@ Let η be the surrogate model's prediction of the response variabeles, y, for th
 The likelihood is calculated following:
 L(θ,σ^2|y)=∏^m [N(η,σ)]
 """
-function lik(data::DataStr,eta::Vector{Float64},sig2::Float64)
+function lik(data::DataStr,eta::Float64,sig2::Float64)
     mean = eta
 
     response = data.exp.y
