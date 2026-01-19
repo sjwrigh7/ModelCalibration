@@ -426,12 +426,14 @@ function posterior_hist!(data::Array{Float64},nbins::Int,var::String,iter::Int,
         title!(LaTeXString("\$"*"\\"*"$(var)\$ Posterior Distribution"))
         xlabel!(LaTeXString("\$"*"\\"*"$(var)\$"))
         ylabel!(LaTeXString("\$p("*"\\"*"$(var)|y)\$"))
+        savename = "$(mdl_apnd)_$var-posterior_dist.png"
     else    
         title!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Posterior Distribution"))
         xlabel!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$"))
         ylabel!(LaTeXString("\$p("*"\\"*"$(var)_{$iter}|y)\$"))
+        savename = "$(mdl_apnd)_$(var)_$(iter)-posterior_dist.png"
     end
-    save_plots ? Plots.savefig(p,"$(mdl_apnd)_$var-posterior_dist.png") : nothing
+    save_plots ? Plots.savefig(p,savename) : nothing
     show_plots ? Plots.display(p) : nothing
 end
 
@@ -485,12 +487,14 @@ function trace_plot!(data::Array{Float64},var::String,iter::Int,
         title!(LaTeXString("\$"*"\\"*"$(var)\$ Trace Plot"))
         ylabel!(LaTeXString("\$"*"\\"*"$(var)\$ Draw Value"))
         xlabel!(LaTeXString("\$"*"\\"*"$(var)\$ Iteration"))
+        savename = "$(mdl_apnd)_$var-trace_plot.png"
     else    
         title!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Trace Plot"))
         ylabel!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Draw Value"))
         xlabel!(LaTeXString("\$"*"\\"*"$(var)_{$iter}\$ Iteration"))
+        savename = "$(mdl_apnd)_$(var)_$(iter)-trace_plot.png"
     end
-    save_plots ? Plots.savefig(p,"$(mdl_apnd)_$var-trace_plot.png") : nothing
+    save_plots ? Plots.savefig(p,savename) : nothing
     show_plots ? Plots.display(p) : nothing
 end
 
