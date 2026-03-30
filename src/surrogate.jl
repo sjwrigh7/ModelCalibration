@@ -38,13 +38,34 @@ function surrogate_model(x::Array{Float64},theta::Array{Float64},
     error("The number of x settings does not match the number of response settings")
     end
     
-    emulator_mean = [MeanZero() for i in 1:num_response_locations]
-    emulator_kern = [SE(repeat([0.0],ntheta),0.0) for i in 1:num_response_locations]
-    model = [GP(theta',y[i,:],emulator_mean[i],emulator_kern[i]) for i in 1:num_response_locations]
+    #emulator_mean = [MeanZero() for i in 1:num_response_locations]
+    #emulator_kern = [SE(repeat([0.0],ntheta),0.0) for i in 1:num_response_locations]
+    #model = [GP(theta',y[i,:],emulator_mean[i],emulator_kern[i]) for i in 1:num_response_locations]
     
+    model = [
+        GP(
+            theta',
+            y[i,:],
+            MeanConst(0.0),
+            SEArd(
+                repeat([0.0],ntheta),0.0
+            ),
+            log(1e-6)
+        )
+    for i in 1:num_response_locations]
+
     for i in eachindex(model)
-    set_priors!(emulator_kern[i],repeat([Normal()],ntheta+1))
-    set_priors!(model[i].logNoise,[Normal(-2.0,0.2)])
+        #set_priors!(emulator_kern[i],repeat([Normal()],ntheta+1))
+        #set_priors!(model[i].logNoise,[Normal(-2.0,0.2)])
+        set_priors!(model[i].mean,[Normal(0.0,2.0)])
+        set_priors!(
+            model[i].kernel,
+            vcat(
+                repeat([Normal(-1.0,2.0)], ntheta),
+                Normal(-1.0,2.0)
+            )
+        )
+        set_priors!(model[i].logNoise,[Normal(log(1e-6),0.1)])
     end
     return model
 end
@@ -74,7 +95,14 @@ Keyword arguments
 function train_model!(model;epochs::Int=2500,make_plots::Bool=true,
             save_plots::Bool=true,show_plots::Bool=true,mdl_apnd::String="")
 
-    model_chains = [ess(model[i],nIter=epochs) for i in eachindex(model)]
+    for i in eachindex(model)
+        try
+            optimize!(model[i],noise=false)
+        catch
+            ess(model[i],nIter=epochs,noise=false)
+        end
+    end
+    #model_chains = [ess(model[i],nIter=epochs) for i in eachindex(model)]
 
     if make_plots
         for i in eachindex(model)
