@@ -9,10 +9,10 @@ DocMeta.setdocmeta!(ModelCalibration, :DocTestSetup, :(using ModelCalibration); 
 
 makedocs(;
     modules=[ModelCalibration],
-    authors="Stephen Wright",
-    sitename="ModelCalibration.jl",
+    authors="sjwrigh7",
+    sitename="ModelCalibration",
     #repo="/home/stephenw/.julia/dev/ModelCalibration",
-    remotes=nothing,
+    #remotes=nothing,
     format=Documenter.HTML(;
         edit_link="main",
         assets=String[],
