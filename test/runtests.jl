@@ -199,8 +199,8 @@ end
 @testset "theta bounds" begin
     delta = 1e-3
     disc = repeat([0.0],nloc)
-    theta_mle = mle[1]
-    covar_mle = mle[2]
+    #theta_mle = mle[1]
+    #covar_mle = mle[2]
     global bounds = ModelCalibration.find_lik_asymptote(model,data,theta_mle,covar_mle;delta)
     max_lik = ModelCalibration.lik(data,theta_mle,disc,covar_mle[1,1],model)
     for i in 1:ntheta
