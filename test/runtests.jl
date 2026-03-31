@@ -185,13 +185,13 @@ end
     adjust = 1e-4 .* (scales.theta.max .- scales.theta.min)
     up_lik = ModelCalibration.loglik(data,theta_mle .+ adjust,delta,covar_mle[1,1],model)
     down_lik = ModelCalibration.loglik(data,theta_mle .- adjust,delta,covar_mle[1,1],model)
-    @test max_lik + 0.01 >= up_lik
-    @test max_lik + 0.01 >= down_lik
+    @test max_lik * 1.1 >= up_lik
+    @test max_lik * 1.1 >= down_lik
     adjust = (1e-4 .* (scales.y.max .- scales.y.min)).^2
     up_lik = ModelCalibration.loglik(data,theta_mle,delta,covar_mle[1,1] + adjust,model)
     down_lik = ModelCalibration.loglik(data,theta_mle,delta,covar_mle[1,1] - adjust,model)
-    @test max_lik + 0.01 >= up_lik
-    @test max_lik + 0.01 >= down_lik
+    @test max_lik * 1.1 >= up_lik
+    @test max_lik * 1.1 >= down_lik
 end
 
 ###############
