@@ -24,3 +24,7 @@ makedocs(;
         "Traditional Bayesian Calibration" => "traditional.md"
     ],
 )
+
+deploydocs(
+    repo = "github.com/sjwrigh7/ModelCalibration.git",
+)
