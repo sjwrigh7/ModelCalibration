@@ -13,7 +13,7 @@ using ProgressMeter
 using StatsPlots
 using BlackBoxOptim
 using Parameters
-using JLD2
+#using JLD2
 using Zygote
 using LaTeXStrings
 using StatsBase
