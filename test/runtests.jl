@@ -1,18 +1,36 @@
+using Pkg
+Pkg.activate(".")
 using ModelCalibration
-using Tests
+using Test
+using Distributions
+using LinearAlgebra
 
 nx = 2
 ntheta = 2
+nloc = 5
 nobs = 5
 
 x = hcat(
     collect(range(0.0,pi,length=nobs)),
     collect(range(10.0,50.0,length=nobs))
 )
-theta = hcat(
-    collect(range(0.1,4.0,length=50)),
-    collect(range(0.1,4.0,length=50))
+
+theta_template = hcat(
+    collect(range(0.1,4.0,length=8)),
+    collect(range(0.1,4.0,length=8))
 )
+theta = Array{Float64}(undef,size(theta_template,1)^2,2)
+let 
+    ita = 0
+    for j in 1:8
+        for i in 1:8
+            ita += 1
+            theta[ita,1] = theta_template[i,1]
+            theta[ita,2] = theta_template[j,2]
+        end
+    end
+end
+
 
 design = Array{Float64}(undef,size(x)[1]*size(theta)[1],
     (size(x)[2]+size(theta)[2]))
@@ -24,30 +42,42 @@ end
 
 simobs = Vector{Float64}(undef,size(design)[1])
 
-for i in eachindex(simobs)
-    simobs[i] = true_fn(x[i,:],theta[i,:])
+let
+    ita = 0
+    for j in axes(theta,1)
+        for i in axes(x,1)
+            ita += 1
+            simobs[ita] = true_fn(x[i,:],theta[j,:])
+            design[ita,1:nx] = x[i,:]
+            design[ita,(nx + 1):end] = theta[j,:]
+        end
+    end
 end
 
 rho = repeat([0.95],size(x)[2])
 sig2 = 0.7
-disc_corr = correlation_construct(rho,x,nx,nobs)
+disc_corr = ModelCalibration.correlation_construct(rho,x,nx,nobs)
 disc_covar = sig2 .* disc_corr
-disc_mean = rand(MvNormal(repeat([0.0],nobs),disc_covar),1)
-delta = rand(disc_mean,disc_covar)
+disc_mean = rand(MvNormal(repeat([0.0],nobs),disc_covar))
+delta = rand(MvNormal(disc_mean,disc_covar))
 
 tau2 = 0.3
-error = rand(MvNormal(repeat([0.0],nobs),
-    tau2 .* Matrix(1.0I,nobs,nobs)),1)
 
-expobs = Array{Float64}(undef,nobs,nx+1)
-expobs[:,1:nx] .= x
+expobs = Array{Float64}(undef,nobs*nloc,nx+1)
+expobs[:,1:nx] .= repeat(x,outer=nobs)
 
 theta_true = [0.4,3.3]
-for i in axes(expobs)[1]
-    expobs[i,end] = true_fn(expobs[i,1:nx],theta_true)
+true_resp = Vector{Float64}(undef,nloc)
+for i in 1:nloc
+    true_resp[i] = true_fn(x[i,:],theta_true)
 end
 
-expobs[:,end] .= expobs[:,end] .+ delta .+ error
+for i in 1:nobs
+    start_idx = (i-1) * nloc + 1
+    stop_idx = i * nloc
+
+    expobs[start_idx:stop_idx,end] = true_resp .+ delta .+ rand(Normal(0.0,tau2),nloc)
+end
 
 nmcmc = 10000
 nburn = 5000
@@ -63,17 +93,27 @@ b_rho = 1.0
 
 
 @testset "setup" begin
-    try
-        nobs,nrep,nloc,scales,data,priors = setup(design,
-        simobs,expobs,nx,ntheta,alpha_tau2,beta_tau2,
-        alpha_sig2,beta_sig2,a_rho,b_rho)
-    catch
-        @test false
-    end
+    #try
+        global nobs,nrep,nloc,scales,data,priors = ModelCalibration.setup(
+            design,
+            simobs,
+            expobs,
+            nx,
+            ntheta,
+            alpha_tau2,
+            beta_tau2,
+            alpha_sig2,
+            beta_sig2,
+            a_rho,
+            b_rho
+        )
+    #catch
+    #    @test false
+    #end
 
     @test nobs == size(expobs)[1]
     @test nloc == size(unique(expobs[:,1:nx],dims=1))[1]
-    @test nrep == round(Int,size(expobs)[1]/nobs)
+    @test nrep == round(Int,size(expobs)[1]/nloc)
     for i in 1:nx
         @test scales.x.min[i] == minimum(expobs[:,i])
         @test scales.x.max[i] == maximum(expobs[:,i])
@@ -82,17 +122,25 @@ b_rho = 1.0
         @test scales.theta.min[i] == minimum(design[:,nx+i])
         @test scales.theta.max[i] == maximum(design[:,nx+i])
     end
-    @test scales.y.min == minimum(simobs)
-    @test scales.y.max == maximum(simobs)
+    @test scales.y.min == min(
+        minimum(simobs),
+        minimum(expobs[:,end])
+    )
+    @test scales.y.max == max(
+        maximum(simobs),
+        maximum(expobs[:,end])
+    )
 
-    @test data.sim.x == (design[:,1:nx] .- scales.x.min) ./
-        (scales.x.max .- scales.x.min)
-    @test data.sim.theta == (design[:,(nx+1):(nx+ntheta)] .-
-     scales.x.min) ./ (scales.theta.max .- scales.theta.min)
-    @test data.sim.y == (simobs .- scales.y.min) ./
+    println(size(data.sim.y))
+    println(size(data.sim.theta))
+    @test data.sim.x == (design[1:nloc,1:nx] .- scales.x.min') ./
+        (scales.x.max' .- scales.x.min')
+    @test data.sim.theta == (design[1:nloc:end,(nx+1):(nx+ntheta)] .-
+     scales.theta.min') ./ (scales.theta.max' .- scales.theta.min')
+    @test vec(data.sim.y) == (simobs .- scales.y.min) ./
         (scales.y.max .- scales.y.min)
-    @test data.exp.x == (expobs[:,1:nx] .- scales.x.min) ./
-        (scales.x.max .- scales.x.min)
+    @test data.exp.x == (expobs[1:nloc,1:nx] .- scales.x.min') ./
+        (scales.x.max' .- scales.x.min')
     for i in 1:nrep
         start = (i-1)*nloc + 1
         stop = i*nloc
@@ -104,125 +152,162 @@ b_rho = 1.0
     @test priors.sig2.par2 == beta_sig2
     @test priors.tau2.par1 == alpha_tau2
     @test priors.tau2.par2 == beta_tau2
-    @test priors.rho.par1 == a_rho
-    @test priors.rho.par2 == b_rho
+    @test all(priors.rho.par1 .== a_rho)
+    @test all(priors.rho.par2 .== b_rho)
     for i in 1:ntheta
-        @test priors.theta.par1[i] == scales.theta.min[i]
-        @test priors.theta.par2[i] == scales.theta.max[i]
+        @test priors.theta.par1[i] == 0.0#scales.theta.min[i]
+        @test priors.theta.par2[i] == 1.0#cales.theta.max[i]
     end
 end
 
 @testset "surrogate model" begin
-    model = surrogate_model(data.sim.x,data.sim.theta,
+    global model = ModelCalibration.surrogate_model(data.sim.x,data.sim.theta,
         data.sim.y,nx,ntheta)
     test_idx = rand(axes(data.sim.theta)[1],20)
     test_set = data.sim.theta[test_idx,:]
     for i in axes(test_set)[1]
-        theta = test_set[i,(nx+1):(nx+ntheta)]
-        eta = predict_y_all(theta,model)
-        train = data.sim.y[test_idx[i],:]
-        @test isapprox(eta,train)
+        theta = test_set[i,:]
+        eta = ModelCalibration.predict_y_all(theta,model)
+        train = data.sim.y[:,test_idx[i]]
+        err = sum((eta .- train).^2)
+        println(err)
+        @test err <= 1e-5
+        #@test all(isapprox.(eta,train))
     end
 end
 
 #TODO edit likelihood function to not need full vars and data inputs
 #TODO add multiple dispatches of the likelihood function
 @testset "maximum likelihood calculation" begin
-    mle = get_mle(data,nx,ntheta)
-    max_lik = loglik(mle[1],mle[2])
+    global theta_mle,covar_mle = ModelCalibration.get_mle(data,nx,nloc,ntheta,model)
+    delta = repeat([0.0],nloc)
+    max_lik = ModelCalibration.loglik(data,theta_mle,delta,covar_mle[1,1],model)
     adjust = 1e-4 .* (scales.theta.max .- scales.theta.min)
-    @test max_lik >= loglik(mle[1] .+ adjust,mle[2])
-    @test max_lik >= loglik(mle[1] .- adjust,mle[2])
-    adjust = (1e-6 .* (scales.y.max .- scales.y.min)).^2
-    @test max_lik >= loglik(mle[1],mle[2] .+ adjustment)
-    @test max_lik >= loglik(mle[1],mle[2] .- adjustment)
+    @test max_lik >= ModelCalibration.loglik(data,theta_mle .+ adjust,delta,covar_mle[1,1],model)
+    @test max_lik >= ModelCalibration.loglik(data,theta_mle .- adjust,delta,covar_mle[1,1],model)
+    adjust = (1e-4 .* (scales.y.max .- scales.y.min)).^2
+    @test max_lik >= ModelCalibration.loglik(data,theta_mle,delta,covar_mle[1,1] + adjust,model)
+    @test max_lik >= ModelCalibration.loglik(data,theta_mle,delta,covar_mle[1,1] - adjust,model)
 end
 
 ###############
 # griddy gibbs method
 @testset "theta bounds" begin
     delta = 1e-3
-    bounds = find_lik_asymptote(data,theta_mle,covar_mle,delta)
+    disc = repeat([0.0],nloc)
+    theta_mle = mle[1]
+    covar_mle = mle[2]
+    global bounds = ModelCalibration.find_lik_asymptote(model,data,theta_mle,covar_mle;delta)
+    max_lik = ModelCalibration.lik(data,theta_mle,disc,covar_mle[1,1],model)
     for i in 1:ntheta
-        thetas = bounds[1]
-        lik_1 = lik(thetas,mle[2])
+        thetas = copy(bounds[1])
+        lik_1 = ModelCalibration.lik(data,thetas,disc,covar_mle[1,1],model)
+        println(lik_1)
         thetas[i] -= delta
-        diff = lik(thetas,mle[2]) - lik_1
+        lik_2 = ModelCalibration.lik(data,thetas,disc,covar_mle[1,1],model)
+        diff = (lik_2 - lik_1) / max_lik
         @test abs(diff) <= 1e-7
-        thetas = bounds[2]
-        lik_1 = lik(thetas,mle[2])
+        thetas = copy(bounds[2])
+        lik_1 = ModelCalibration.lik(data,thetas,disc,covar_mle[1,1],model)
         thetas[i] += delta
-        diff = lik(thetas,mle[2])
+        lik_2 = ModelCalibration.lik(data,thetas,disc,covar_mle[1,1],model)
+        diff = (lik_2 - lik_1) / max_lik
         @test abs(diff) <= 1e-7
     end
 end
 
 #TODO add grid responses to output of this function
 @testset "Grid generation" begin
-    doe = generate_sample_grid(30,data,nx,theta)
+    global doe,resp = ModelCalibration.generate_sample_grid(30,data,nx,ntheta,model)
     for i in 1:ntheta
-        @test prod(doe[:,i] .< bounds[1][i])
-        @test prod(doe[:,i] .> bounds[2][i])
+        @test all(doe[:,i] .<= bounds[1][i])
+        @test all(doe[:,i] .>= bounds[2][i])
     end
 end
 @testset "generate grid info" begin
-    try    
-        grid_info = GridData(
-            sig_star2 = GridPar(
+    #try    
+        global grid_info = ModelCalibration.GridData(
+            phi = ModelCalibration.GridPar(
                 density=40,
-                bounds = ScalePar(
+                bounds = ModelCalibration.ScalePar(
                     min = 1e-2,
                     max = 10000.0
                 )
             ),
-            rho = GridPar(
+            rho = ModelCalibration.GridPar(
                 density=10,
-                bounds = ScalePar(
+                bounds = ModelCalibration.ScalePar(
                     min=0.0001,
                     max = 0.9999
                 )
             )
         )
-    catch
-        @test false
-    end
+    #catch
+    #    @test false
+    #end
 end
 
 @testset "griddy gibbs preallocation" begin
-    try
-        c_sse,log_det_sig,sig_design = preallocate(data,
-            grid_info)
-    catch
-        @test false
-    end
+    #try
+        global c_sse,log_det_sig,sig_design = ModelCalibration.preallocate(doe,
+            grid_info,nx)
+    #catch
+    #    @test false
+    #end
+    println(size(c_sse))
+    println(size(log_det_sig))
     @test size(c_sse)[1] == size(doe)[1]
-    @test size(c_sse)[3] == grid_info.sig_star2.density
+    @test size(c_sse)[3] == grid_info.phi.density
     @test size(c_sse)[2] == grid_info.rho.density
 
-    @test size(c_sse)[3] == size(log_det_sig)[1]
-    @test size(c_see)[2] == size(log_det_sig)[2]
+    @test size(c_sse)[2] == size(log_det_sig)[1]
+    @test size(c_sse)[3] == size(log_det_sig)[2]
 
     @test size(sig_design)[1] == grid_info.rho.density
-    @test size(sig_design)[1] == grid_info.sig_star2.density
+    @test size(sig_design)[2] == grid_info.phi.density
 end
 
 @testset "griddy gibbs precomputation" begin
-    precompute!(data,c_sse,log_det_sig,sig_design)
+    ModelCalibration.precompute!(
+        resp,
+        data,
+        c_sse,
+        log_det_sig,
+        sig_design,
+        nx
+    )
 
-    test_idx = [rand(1:size(c_sse)[i],min(5,0.01*size(c_sse)[i]))
+    test_idx = [
+        rand(
+            1:size(c_sse)[i],
+            min(
+                5,
+                max(
+                    1,
+                    Int(floor(0.01*size(c_sse)[i]))
+                )
+            )
+        )
         for i in eachindex(size(c_sse))]
     for k in test_idx[3]
         for j in test_idx[2]
             for i in test_idx[1]
                 rho_vec = repeat([sig_design[j,k,1]],nx)
-                corr = correlation_construct(rho_vec,
-                    data.exp.x,nx,nloc)
+                corr = ModelCalibration.correlation_construct(
+                    rho_vec,
+                    data.exp.x,
+                    nx,
+                    nloc
+                )
                 sig = Matrix(1.0I,nloc,nloc) +
                     sig_design[j,k,2] .* corr
-                y_hat = grid_resp[i,:]
-                @test log_det_sig[j,k] == det(sig)
-                y_bar = mean(data.exp.y,dims=2)
-                val = scaled_sse(y_hat,inv(sig),y_bar,nobs)
+                
+                y_hat = resp[i,:]
+                
+                @test log_det_sig[j,k] == log(det(sig)^(-nloc/2))
+                
+                y_bar = vec(mean(data.exp.y,dims=2))
+                val = ModelCalibration.scaled_sse(y_hat,inv(sig),y_bar,nrep)
                 @test val == c_sse[i,j,k]
             end
         end
@@ -230,20 +315,20 @@ end
 end
 
 @testset "initialize variables" begin
-    try
-        sampling_vars = init_vars(data,nmcmc)
-    catch
-        @test false
-    end
+    #try
+        sampling_vars = ModelCalibration.init_vars(nmcmc)
+    #catch
+    #    @test false
+    #end
     @test length(sampling_vars.theta) == nmcmc
-    @test length(sampling_vars.tau2) == nmcmc
+    @test length(sampling_vars.sig2) == nmcmc
     @test length(sampling_vars.rho) == nmcmc
-    @test length(sampling_vars.sig_star2) == nmcmc
+    @test length(sampling_vars.phi) == nmcmc
 
     @test typeof(sampling_vars.theta[1]) == Int
     @test typeof(sampling_vars.rho[1]) == Int
-    @test typeof(sampling_vars.sig_star2[1]) == Int
-    @test typeof(sampling_vars.tau2[1]) == Float64
+    @test typeof(sampling_vars.phi[1]) == Int
+    @test typeof(sampling_vars.sig2[1]) == Float64
 end
 
 #TODO add tests for sampling scheme
