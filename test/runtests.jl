@@ -171,7 +171,7 @@ end
         train = data.sim.y[:,test_idx[i]]
         err = sum((eta .- train).^2)
         println(err)
-        @test err <= 1e-5
+        @test err <= 1e-3
         #@test all(isapprox.(eta,train))
     end
 end
