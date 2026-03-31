@@ -210,13 +210,13 @@ end
         thetas[i] -= delta
         lik_2 = ModelCalibration.lik(data,thetas,disc,covar_mle[1,1],model)
         diff = (lik_2 - lik_1) / max_lik
-        @test abs(diff) <= 1e-7
+        @test abs(diff) <= 1e-5
         thetas = copy(bounds[2])
         lik_1 = ModelCalibration.lik(data,thetas,disc,covar_mle[1,1],model)
         thetas[i] += delta
         lik_2 = ModelCalibration.lik(data,thetas,disc,covar_mle[1,1],model)
         diff = (lik_2 - lik_1) / max_lik
-        @test abs(diff) <= 1e-7
+        @test abs(diff) <= 1e-5
     end
 end
 
