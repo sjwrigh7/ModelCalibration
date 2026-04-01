@@ -193,7 +193,7 @@ end
     end
     if max_lik * 1.1 <= down_lik
         @warn "Higher than expected error in likelihood optimization"
-    ene
+    end
     adjust = (1e-4 .* (scales.y.max .- scales.y.min)).^2
     up_lik = ModelCalibration.loglik(data,theta_mle,delta,covar_mle[1,1] + adjust,model)
     down_lik = ModelCalibration.loglik(data,theta_mle,delta,covar_mle[1,1] - adjust,model)
