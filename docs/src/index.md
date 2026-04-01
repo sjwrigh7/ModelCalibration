@@ -11,4 +11,4 @@ Pages = ["steup.md","griddy.md","traditional.md"]
 ```
 
 
-Documentation for `ModelCalibration` **NOT PUBLICLY RELEASED**.
+Documentation for `ModelCalibration`.
