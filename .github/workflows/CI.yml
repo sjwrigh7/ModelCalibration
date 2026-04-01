@@ -45,8 +45,8 @@ jobs:
       - uses: codecov/codecov-action@v5
         with:
           files: lcov.info
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ secrets.DOCUMENTER_KEY }}
           fail_ci_if_error: false
       - uses: julia-actions/julia-uploadcoveralls@v1
         env:
-          COVERALLS_TOKEN: ${{ secrets.COVERALLS_TOKEN }}
+          COVERALLS_TOKEN: ${{ secrets.DOCUMENTER_KEY }}
